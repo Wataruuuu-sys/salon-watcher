@@ -1,5 +1,6 @@
 import type { SourceId } from '../domain/types.js';
 import type { Source } from './types.js';
+import { googleMapsSource } from './googleMaps/source.js';
 
 const ALL_SOURCES: SourceId[] = ['google_maps', 'threads'];
 
@@ -27,3 +28,5 @@ export function getSource(id: SourceId): Source {
   if (!source) throw new Error(`unknown source: ${id}`);
   return source;
 }
+
+registerSource(googleMapsSource);
