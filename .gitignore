@@ -4,3 +4,5 @@ dist/
 cdk.out/
 web/out/
 .next/
+web/next-env.d.ts
+*.tsbuildinfo

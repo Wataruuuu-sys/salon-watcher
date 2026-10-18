@@ -1,0 +1,33 @@
+:root { --bg:#f3f4f7; --card:#fff; --ink:#1b1e24; --muted:#6d7380; --line:#e5e7ec; --accent:#b8285c; --accent-soft:#fbeef3; --ok:#0f6e56; --ok-soft:#e1f5ee; --gray-soft:#eef0f3; }
+* { box-sizing: border-box; margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: 'Hiragino Sans','Yu Gothic',sans-serif; font-size: 15px; line-height: 1.6; padding: 32px 20px 64px; }
+.wrap { max-width: 1080px; margin: 0 auto; }
+header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+.eyebrow { font-size: 12px; letter-spacing: .14em; color: var(--accent); }
+h1 { font-size: 26px; }
+h2 { font-size: 18px; margin-bottom: 8px; }
+nav a { margin-left: 16px; color: var(--ink); }
+.tabs { display: inline-flex; background: var(--gray-soft); border-radius: 999px; padding: 3px; margin-bottom: 12px; }
+.tabs button { border: 0; background: none; font: inherit; padding: 6px 18px; border-radius: 999px; cursor: pointer; }
+.tabs button[aria-selected='true'] { background: var(--ink); color: #fff; }
+.filters { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.filters label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); }
+select, textarea { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+textarea { width: 100%; margin: 8px 0; }
+.table-wrap { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; color: var(--muted); font-weight: 500; }
+.evidence { list-style: none; padding: 0; }
+.evidence a { color: var(--accent); }
+.badge { display: inline-block; font-size: 12px; padding: 1px 10px; border-radius: 999px; background: var(--gray-soft); margin-left: 6px; }
+td > .badge:first-child { margin-left: 0; }
+.badge-listed { background: var(--ok-soft); color: var(--ok); }
+.badge-not_listed, .badge-future { background: var(--accent-soft); color: var(--accent); }
+.empty, .muted { color: var(--muted); }
+.error { color: #b3261e; margin: 8px 0; }
+.ok { color: var(--ok); margin: 8px 0; }
+.actions { display: flex; gap: 10px; margin-top: 8px; }
+button { font: inherit; background: var(--ink); color: #fff; border: 0; border-radius: 999px; padding: 10px 22px; cursor: pointer; }
+button.secondary { background: var(--gray-soft); color: var(--ink); }
+button:disabled { opacity: .55; cursor: default; }
