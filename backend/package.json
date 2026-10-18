@@ -6,6 +6,7 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "migrate": "drizzle-kit migrate",
     "import-v3": "tsx src/cli/importV3.ts"
   },
   "devDependencies": {
