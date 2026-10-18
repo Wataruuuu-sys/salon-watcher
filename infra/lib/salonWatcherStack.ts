@@ -37,10 +37,13 @@ export class SalonWatcherStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
+    // Deploy settings come only from `-c key=value`; placeholder addresses are refused.
     const ctx = (key: string, fallback?: string): string => {
       const v = this.node.tryGetContext(key) as string | undefined;
       if (v === undefined && fallback === undefined) throw new Error(`missing CDK context: ${key}`);
-      return v ?? fallback ?? '';
+      const value = v ?? fallback ?? '';
+      if (value.includes('example.com')) throw new Error(`CDK context ${key} is a placeholder (example.com): ${value}`);
+      return value;
     };
     const ownerEmail = ctx('ownerEmail');
     const notifyFrom = ctx('notifyFrom');
@@ -178,6 +181,13 @@ export class SalonWatcherStack extends Stack {
     collectMap.itemProcessor(collectTask);
     const processTask = invoke('Process', processFn, { payload: sfn.TaskInput.fromObject({}), resultPath: '$.processResult', payloadResponseOnly: true });
     const hpbTask = invoke('Hpb', hpbFn, { payload: sfn.TaskInput.fromObject({}), resultPath: '$.hpbResult', payloadResponseOnly: true });
+    // A failed Process must not skip the HPB check; the execution still fails at the end.
+    processTask.addCatch(hpbTask, { errors: ['States.ALL'], resultPath: '$.processError' });
+    const processFailed = new sfn.Fail(this, 'ProcessFailed', {
+      error: 'ProcessFailed',
+      cause: 'The process step failed; see processError in the execution output.',
+    });
+    const processErrored = sfn.Condition.jsonata('{% $exists($states.input.processError) %}');
     const shardsFailed = new sfn.Fail(this, 'ShardsFailed', {
       error: 'CollectShardsFailed',
       cause: 'One or more collect shards failed; see collectResults in the execution output.',
@@ -188,7 +198,7 @@ export class SalonWatcherStack extends Stack {
       .next(collectMap)
       .next(processTask)
       .next(hpbTask)
-      .next(new sfn.Choice(this, 'AnyShardFailed', { queryLanguage: sfn.QueryLanguage.JSONATA }).when(anyFailed, shardsFailed).otherwise(new sfn.Succeed(this, 'Done')));
+      .next(new sfn.Choice(this, 'AnyShardFailed', { queryLanguage: sfn.QueryLanguage.JSONATA }).when(anyFailed, shardsFailed).when(processErrored, processFailed).otherwise(new sfn.Succeed(this, 'Done')));
 
     const pipeline = new sfn.StateMachine(this, 'Pipeline', {
       stateMachineName: 'salon-watcher-pipeline',
@@ -234,8 +244,21 @@ export class SalonWatcherStack extends Stack {
       comparisonOperator: cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
       treatMissingData: cw.TreatMissingData.NOT_BREACHING,
     });
-    pipelineAlarm.addAlarmAction(alarmAction);
-    refreshAlarm.addAlarmAction(alarmAction);
+    const pipelineTimedOutAlarm = new cw.Alarm(this, 'PipelineTimedOutAlarm', {
+      metric: pipeline.metricTimedOut({ period: Duration.hours(1), statistic: 'Sum' }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cw.TreatMissingData.NOT_BREACHING,
+    });
+    const notifyAlarm = new cw.Alarm(this, 'NotifyErrorsAlarm', {
+      metric: notifyFn.metricErrors({ period: Duration.hours(1), statistic: 'Sum' }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cw.TreatMissingData.NOT_BREACHING,
+    });
+    for (const alarm of [pipelineAlarm, pipelineTimedOutAlarm, refreshAlarm, notifyAlarm]) alarm.addAlarmAction(alarmAction);
 
     // ---- Cognito ----
     const userPool = new cognito.UserPool(this, 'UserPool', {
@@ -264,9 +287,10 @@ export class SalonWatcherStack extends Stack {
         maxAge: Duration.hours(1),
       },
     });
+    const cognitoAuthority = `https://cognito-idp.${this.region}.amazonaws.com/${userPool.userPoolId}`;
     const authorizer = new apigwAuth.HttpJwtAuthorizer(
       'JwtAuthorizer',
-      `https://cognito-idp.${this.region}.amazonaws.com/${userPool.userPoolId}`,
+      cognitoAuthority,
       { jwtAudience: [userPoolClient.userPoolClientId] },
     );
     const integration = new apigwInt.HttpLambdaIntegration('ApiIntegration', apiFn);
@@ -284,6 +308,7 @@ export class SalonWatcherStack extends Stack {
     new CfnOutput(this, 'SiteUrl', { value: siteUrl });
     new CfnOutput(this, 'ApiUrl', { value: httpApi.apiEndpoint });
     new CfnOutput(this, 'UserPoolId', { value: userPool.userPoolId });
+    new CfnOutput(this, 'CognitoAuthority', { value: cognitoAuthority });
     new CfnOutput(this, 'UserPoolClientId', { value: userPoolClient.userPoolClientId });
     new CfnOutput(this, 'CognitoDomain', {
       value: `${cognitoDomainPrefix}.auth.${this.region}.amazoncognito.com`,
