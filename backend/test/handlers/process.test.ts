@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { getTestDb, resetDb } from '../helpers/db.js';
 import { ingestRawItems } from '../../src/sources/ingest.js';
 import { evidence, rawItems, stores } from '../../src/db/schema.js';
+import { resolveStore } from '../../src/resolve/resolveStore.js';
 import { processPending } from '../../src/handlers/process.js';
 import type { Classification, RawItemInput } from '../../src/domain/types.js';
 import type { LlmClassifier } from '../../src/classify/classify.js';
@@ -125,5 +126,23 @@ describe('processPending', () => {
     expect(await processPending(db, llm)).toEqual({ resolved: 2, rejected: 0, retried: 0 });
     expect(await db.select().from(stores)).toHaveLength(1);
     expect(await db.select().from(evidence)).toHaveLength(2);
+  });
+
+  it('continues past an item whose resolve fails, leaving it pending', async () => {
+    await ingestRawItems(db, [
+      threadsItem({ externalId: 'a', url: 'https://threads/a', authorHandle: 'threads:a' }),
+      threadsItem({ externalId: 'b', url: 'https://threads/b', authorHandle: 'threads:b' }),
+    ]);
+    const { llm } = fakeLlm(() => cls({ storeName: 'Alpha', reason: 'r' }));
+    const errors: string[] = [];
+    const log = { info() {}, warn() {}, error: (m: string) => void errors.push(m) };
+    const resolve: typeof resolveStore = async (d, input) => {
+      if (input.url.endsWith('/a')) throw new Error('db down');
+      return resolveStore(d, input);
+    };
+    expect(await processPending(db, llm, 500, { log, resolve })).toEqual({ resolved: 1, rejected: 0, retried: 1 });
+    expect(errors).toHaveLength(1);
+    const rows = await db.select().from(rawItems).orderBy(rawItems.id);
+    expect(rows.map((r) => r.status)).toEqual(['pending', 'resolved']);
   });
 });

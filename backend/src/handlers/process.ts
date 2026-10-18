@@ -4,6 +4,7 @@ import type { Db } from '../db/client.js';
 import { rawItems } from '../db/schema.js';
 import type { Classification, Confidence } from '../domain/types.js';
 import { resolveStore } from '../resolve/resolveStore.js';
+import { createLogger, type Logger } from '../lib/log.js';
 import { buildContext } from './context.js';
 
 const MAX_ATTEMPTS = 3;
@@ -23,6 +24,7 @@ export async function processPending(
   db: Db,
   llm: LlmClassifier,
   limit = 500,
+  deps: { log?: Logger; resolve?: typeof resolveStore } = {},
 ): Promise<{ resolved: number; rejected: number; retried: number }> {
   const pending = await db
     .select()
@@ -31,6 +33,8 @@ export async function processPending(
     .orderBy(asc(rawItems.fetchedAt), asc(rawItems.id))
     .limit(limit);
 
+  const log = deps.log ?? createLogger();
+  const resolve = deps.resolve ?? resolveStore;
   const out = { resolved: 0, rejected: 0, retried: 0 };
   for (const item of pending) {
     let classification: Classification;
@@ -57,26 +61,29 @@ export async function processPending(
       }
     }
 
-    if (classification.verdict === 'no') {
-      await db
-        .update(rawItems)
-        .set({ classification, status: 'rejected' })
-        .where(eq(rawItems.id, item.id));
-      out.rejected++;
-      continue;
-    }
+    try {
+      if (classification.verdict === 'no') {
+        await db.update(rawItems).set({ classification, status: 'rejected' }).where(eq(rawItems.id, item.id));
+        out.rejected++;
+        continue;
+      }
 
-    await resolveStore(db, {
-      rawItemId: item.id,
-      source: item.source as 'google_maps' | 'threads',
-      url: item.url,
-      placeId: item.placeId,
-      snsHandle: item.authorHandle,
-      classification,
-      confidence,
-    });
-    await db.update(rawItems).set({ classification, status: 'resolved' }).where(eq(rawItems.id, item.id));
-    out.resolved++;
+      await resolve(db, {
+        rawItemId: item.id,
+        source: item.source as 'google_maps' | 'threads',
+        url: item.url,
+        placeId: item.placeId,
+        snsHandle: item.authorHandle,
+        classification,
+        confidence,
+      });
+      await db.update(rawItems).set({ classification, status: 'resolved' }).where(eq(rawItems.id, item.id));
+      out.resolved++;
+    } catch (err) {
+      // Leave the item pending (resolve is idempotent per raw item) and keep going.
+      log.error('resolve failed', { rawItemId: item.id, error: String(err) });
+      out.retried++;
+    }
   }
   return out;
 }
