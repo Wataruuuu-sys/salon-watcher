@@ -41,10 +41,11 @@ export function threadsClient(token: string, http: typeof fetch): ThreadsClient 
         throw new ThreadsAuthError(`threads auth failed (HTTP ${res.status})`);
       }
       if (!res.ok) throw new Error(`threads keyword_search failed: HTTP ${res.status}`);
-      return (body.data ?? []).map((p) => ({
+      // Without an id (dedupe key) or permalink (lead URL) a post is unusable.
+      return (body.data ?? []).filter((p) => p.id && p.permalink).map((p) => ({
         id: String(p.id),
         text: p.text ?? '',
-        permalink: p.permalink ?? '',
+        permalink: p.permalink!,
         username: p.username ?? '',
         timestamp: p.timestamp ?? '',
       }));

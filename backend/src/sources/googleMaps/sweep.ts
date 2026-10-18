@@ -54,6 +54,8 @@ export async function sweepGenre(
   const queries = GENRES.find((g) => g.id === genre)?.mapsQueries ?? [];
   const result: SweepResult = { queried: 0, newIds: 0, subdivided: 0 };
   const searched = new Map<number, { seeded: boolean; count: number }>();
+  let attempts = 0;
+  let failures = 0;
 
   /** All pages for one query. `saturated` = the 60-result cap was reached. */
   async function searchAll(query: string, cell: Cell): Promise<{ ids: string[]; saturated: boolean }> {
@@ -84,12 +86,14 @@ export async function sweepGenre(
     let saturated = false;
     let failed = false;
     for (const q of queries) {
+      attempts++;
       try {
         const r = await searchAll(q, cell);
         r.ids.forEach((id) => found.add(id));
         saturated ||= r.saturated;
       } catch (err) {
         failed = true;
+        failures++;
         opts.log?.warn('maps search failed', { genre, cellId: cell.id, query: q, error: String(err) });
       }
     }
@@ -120,6 +124,11 @@ export async function sweepGenre(
   await runPool(active, opts.concurrency ?? 10, (c) =>
     sweepCell({ id: c.id, lat: c.lat, lng: c.lng, radiusM: c.radiusM, seeded: c.seeded }),
   );
+
+  if (attempts > 0 && failures === attempts) {
+    // Total outage (bad key, quota): fail the shard so the alarm fires.
+    throw new Error(`every maps search failed for ${genre} (${attempts} searches)`);
+  }
 
   const now = new Date();
   for (const [id, s] of searched) {

@@ -32,6 +32,7 @@ export function createThreadsSource(makeClient: MakeClient = threadsClient): Sou
       const byId = new Map<string, ThreadsPost>();
       let authError: ThreadsAuthError | undefined;
       let next = 0;
+      let failures = 0;
 
       async function worker(): Promise<void> {
         while (authError === undefined) {
@@ -41,13 +42,20 @@ export function createThreadsSource(makeClient: MakeClient = threadsClient): Sou
             for (const p of await client.keywordSearch(q)) if (!byId.has(p.id)) byId.set(p.id, p);
           } catch (err) {
             if (err instanceof ThreadsAuthError) authError ??= err;
-            else ctx.log.warn('threads query failed', { query: q, error: String(err) });
+            else {
+              failures++;
+              ctx.log.warn('threads query failed', { query: q, error: String(err) });
+            }
           }
         }
       }
 
       await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queries.length) }, worker));
       if (authError) throw authError;
+      // Total outage must fail the shard (and raise the alarm) rather than look like a quiet day.
+      if (queries.length > 0 && failures === queries.length) {
+        throw new Error(`all ${queries.length} threads queries failed`);
+      }
       ctx.log.info('threads collect done', { queries: queries.length, posts: byId.size });
       return [...byId.values()].map(toRawItem);
     },

@@ -59,6 +59,16 @@ describe('threads source', () => {
     expect(warned).toHaveLength(1);
   });
 
+  it('throws when every query fails so the shard fails', async () => {
+    await saveThreadsQueries(db, ['a', 'b'], 'u');
+    const src = createThreadsSource(() => ({
+      keywordSearch: async () => {
+        throw new Error('boom');
+      },
+    }));
+    await expect(src.collect('all', ctxFor(db))).rejects.toThrow(/all 2 threads queries failed/);
+  });
+
   it('rethrows ThreadsAuthError', async () => {
     await saveThreadsQueries(db, ['a', 'b'], 'u');
     const src = createThreadsSource(() => ({
@@ -103,5 +113,17 @@ describe('threadsClient', () => {
     expect((await c.keywordSearch('q'))[0]!.text).toBe('');
     const empty = threadsClient('T', (async () => json({})) as unknown as typeof fetch);
     expect(await empty.keywordSearch('q')).toEqual([]);
+  });
+
+  it('skips posts without an id or permalink', async () => {
+    const c = threadsClient('T', (async () =>
+      json({
+        data: [
+          { permalink: 'https://threads.net/p/x', username: 'u', timestamp: 't' },
+          { id: '8', username: 'u', timestamp: 't' },
+          { id: '9', permalink: 'https://threads.net/p/9', username: 'u', timestamp: 't' },
+        ],
+      })) as unknown as typeof fetch);
+    expect((await c.keywordSearch('q')).map((p) => p.id)).toEqual(['9']);
   });
 });

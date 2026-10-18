@@ -127,4 +127,13 @@ describe('sweepGenre', () => {
     expect(cells.find((c) => c.lng === A.lng)!.seeded).toBe(false);
     expect(cells.find((c) => c.lng === B.lng)!.seeded).toBe(true);
   });
+
+  it('throws when every (cell, query) search fails', async () => {
+    await addCells(db, 'hair', [A, B]);
+    const client = fakeClient(() => []);
+    client.searchIds = async () => {
+      throw new Error('quota');
+    };
+    await expect(sweepGenre(db, client, 'hair')).rejects.toThrow(/every maps search failed/);
+  });
 });

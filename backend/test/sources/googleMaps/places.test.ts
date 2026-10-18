@@ -54,6 +54,17 @@ describe('placesClient', () => {
     expect(masks).toHaveLength(2);
   });
 
+  it('details requests Japanese and falls back to a place_id maps URL', async () => {
+    const urls: string[] = [];
+    const http = (async (u: string) => {
+      urls.push(u);
+      return json(200, { id: 'pid', displayName: { text: 'S' }, formattedAddress: '東京都立川市1' });
+    }) as unknown as typeof fetch;
+    const d = await placesClient('K', http).details('pid');
+    expect(new URL(urls[0]!).searchParams.get('languageCode')).toBe('ja');
+    expect(d!.mapsUrl).toBe('https://www.google.com/maps/place/?q=place_id:pid');
+  });
+
   it('details formats openingDate and returns null on failure', async () => {
     const ok = (async () =>
       json(200, { id: 'p', displayName: { text: 'S' }, openingDate: { year: 2026, month: 11, day: 3 } })) as unknown as typeof fetch;

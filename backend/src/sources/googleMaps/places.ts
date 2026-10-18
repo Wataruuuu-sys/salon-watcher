@@ -83,16 +83,17 @@ export function placesClient(apiKey: string, http: typeof fetch, opts: { backoff
     async details(placeId) {
       // openingDate may be rejected with 400 on some setups: retry without it.
       for (const mask of [`${DETAIL_FIELDS},openingDate`, DETAIL_FIELDS]) {
-        const res = await call(`${BASE}/places/${encodeURIComponent(placeId)}`, {
+        const res = await call(`${BASE}/places/${encodeURIComponent(placeId)}?languageCode=ja`, {
           headers: { 'X-Goog-Api-Key': apiKey, 'X-Goog-FieldMask': mask },
         });
         if (res.ok) {
           const p = (await res.json()) as ApiPlace;
+          const id = p.id ?? placeId;
           return {
-            id: p.id ?? placeId,
+            id,
             name: p.displayName?.text ?? '',
             address: p.formattedAddress ?? '',
-            mapsUrl: p.googleMapsUri ?? '',
+            mapsUrl: p.googleMapsUri || `https://www.google.com/maps/place/?q=place_id:${encodeURIComponent(id)}`,
             businessStatus: p.businessStatus ?? '',
             openingDate: formatOpeningDate(p.openingDate),
             types: p.types ?? [],
