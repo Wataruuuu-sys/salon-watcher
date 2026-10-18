@@ -22,8 +22,26 @@ function stronger(a: string, b: Confidence): Confidence {
   return (STRENGTH[a as Confidence] ?? 0) >= STRENGTH[b] ? (a as Confidence) : b;
 }
 
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+
+/** Whether an observation with this (normalized) name may merge into the store found by its sns handle. */
+async function handleNameCompatible(
+  tx: Tx,
+  store: typeof stores.$inferSelect,
+  handle: string,
+  nameNorm: string | null,
+): Promise<boolean> {
+  if (!nameNorm) return true;
+  if (store.name === handle || store.name === UNKNOWN_NAME) return true;
+  if (store.nameNorm === nameNorm) return true;
+  const rows = await tx.execute<{ sim: number }>(
+    sql`SELECT similarity(${store.nameNorm}, ${nameNorm}) AS sim`,
+  );
+  return Number(rows[0]?.sim ?? 0) >= SIMILARITY_THRESHOLD;
+}
+
 /**
- * Find the store this observation belongs to (placeId, then snsHandle, then fuzzy name + city),
+ * Find the store this observation belongs to (placeId, then snsHandle with a compatible name, then fuzzy name + city),
  * creating it when none matches, and attach the observation as evidence.
  */
 export async function resolveStore(
@@ -36,20 +54,29 @@ export async function resolveStore(
 
   return db.transaction(async (tx) => {
     let existing: typeof stores.$inferSelect | undefined;
+    let handleTaken = false;
 
     if (input.placeId) {
       [existing] = await tx.select().from(stores).where(eq(stores.placeId, input.placeId));
     }
     if (!existing && input.snsHandle) {
-      [existing] = await tx.select().from(stores).where(eq(stores.snsHandle, input.snsHandle));
+      // The handle is the poster's, who may announce several stores: only merge on a compatible name.
+      const [byHandle] = await tx.select().from(stores).where(eq(stores.snsHandle, input.snsHandle));
+      if (byHandle && (await handleNameCompatible(tx, byHandle, input.snsHandle, nameNorm))) existing = byHandle;
+      else if (byHandle) handleTaken = true;
     }
     if (!existing && nameNorm) {
       const cityCond = c.city
         ? sql`AND (city IS NULL OR city = ${c.city})`
         : sql``;
+      // Two Map places are distinct by definition; a store owned by another handle is another poster's.
+      const placeCond = input.placeId ? sql`AND place_id IS NULL` : sql``;
+      const handleCond = input.snsHandle
+        ? sql`AND (sns_handle IS NULL OR sns_handle = ${input.snsHandle})`
+        : sql``;
       const rows = await tx.execute<{ id: number }>(sql`
         SELECT id FROM stores
-        WHERE similarity(name_norm, ${nameNorm}) >= ${SIMILARITY_THRESHOLD} ${cityCond}
+        WHERE similarity(name_norm, ${nameNorm}) >= ${SIMILARITY_THRESHOLD} ${cityCond} ${placeCond} ${handleCond}
         ORDER BY similarity(name_norm, ${nameNorm}) DESC, id
         LIMIT 1`);
       const hit = rows[0];
@@ -96,7 +123,7 @@ export async function resolveStore(
           genre: c.genre,
           city: c.city,
           placeId: input.placeId,
-          snsHandle: input.snsHandle,
+          snsHandle: handleTaken ? null : input.snsHandle,
           confidence: input.confidence,
           openingDate: c.openingDate,
         })

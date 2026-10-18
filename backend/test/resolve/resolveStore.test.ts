@@ -94,10 +94,53 @@ describe('resolveStore', () => {
     expect(other.storeId).not.toBe(first.storeId);
   });
 
-  it('merges by same handle even with a different name', async () => {
+  it('merges by same handle when the name is compatible or unknown', async () => {
+    const a = await resolveStore(db, await input({ snsHandle: 'threads:h', c: { storeName: 'Alpha' } }));
+    const b = await resolveStore(db, await input({ snsHandle: 'threads:h', c: { storeName: 'Alpha 立川店' } }));
+    const c = await resolveStore(db, await input({ snsHandle: 'threads:h', c: { storeName: null } }));
+    expect(b).toEqual({ storeId: a.storeId, created: false });
+    expect(c).toEqual({ storeId: a.storeId, created: false });
+  });
+
+  it('merges a named post into a store created under the handle fallback name', async () => {
+    const a = await resolveStore(db, await input({ snsHandle: 'threads:h3', c: { storeName: null } }));
+    const b = await resolveStore(db, await input({ snsHandle: 'threads:h3', c: { storeName: 'Beta' } }));
+    expect(b).toEqual({ storeId: a.storeId, created: false });
+  });
+
+  it('keeps two differently named stores announced by the same poster handle separate', async () => {
     const a = await resolveStore(db, await input({ snsHandle: 'threads:h', c: { storeName: 'Alpha' } }));
     const b = await resolveStore(db, await input({ snsHandle: 'threads:h', c: { storeName: 'Totally Different' } }));
-    expect(b).toEqual({ storeId: a.storeId, created: false });
+    expect(b.created).toBe(true);
+    expect(b.storeId).not.toBe(a.storeId);
+    const rows = await db.select().from(stores).orderBy(stores.id);
+    expect(rows.map((r) => r.snsHandle)).toEqual(['threads:h', null]);
+  });
+
+  it('keeps two Map places with different placeIds but the same name separate', async () => {
+    const mk = async (placeId: string) =>
+      resolveStore(
+        db,
+        await input({ source: 'google_maps', placeId, confidence: 'map', c: { storeName: 'Lily', city: '立川市' } }),
+      );
+    const a = await mk('PA');
+    const b = await mk('PB');
+    expect(b.created).toBe(true);
+    expect(b.storeId).not.toBe(a.storeId);
+    expect(await db.select().from(stores)).toHaveLength(2);
+  });
+
+  it('does not fuzzy-merge into a store owned by a different sns handle', async () => {
+    const a = await resolveStore(
+      db,
+      await input({ snsHandle: 'threads:one', c: { storeName: 'Hair Make Lily', city: '立川市' } }),
+    );
+    const b = await resolveStore(
+      db,
+      await input({ snsHandle: 'threads:two', c: { storeName: 'Hair Make Lily', city: null } }),
+    );
+    expect(b.created).toBe(true);
+    expect(b.storeId).not.toBe(a.storeId);
   });
 
   it('skips fuzzy matching for null names and falls back to handle / unknown', async () => {
