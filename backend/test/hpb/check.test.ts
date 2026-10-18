@@ -82,11 +82,11 @@ describe('checkPendingStores', () => {
     expect(n).toBe(2);
     const rows = await db.select().from(stores);
     const by = Object.fromEntries(rows.map((r) => [r.name, r]));
-    expect(by['ネイルサロン Lily'].hpbStatus).toBe('listed');
-    expect(by['ネイルサロン Lily'].hpbUrl).toBe('https://beauty.hotpepper.jp/slnH000000001/');
-    expect(by['ネイルサロン Lily'].hpbCheckedAt).toBeInstanceOf(Date);
-    expect(by['Zzz'].hpbStatus).toBe('not_listed');
-    expect(by['Zzz'].hpbCheckedAt).toBeInstanceOf(Date);
-    expect(by['Done'].hpbCheckedAt).toBeNull();
+    expect(by['ネイルサロン Lily']!.hpbStatus).toBe('listed');
+    expect(by['ネイルサロン Lily']!.hpbUrl).toBe('https://beauty.hotpepper.jp/slnH000000001/');
+    expect(by['ネイルサロン Lily']!.hpbCheckedAt).toBeInstanceOf(Date);
+    expect(by['Zzz']!.hpbStatus).toBe('not_listed');
+    expect(by['Zzz']!.hpbCheckedAt).toBeInstanceOf(Date);
+    expect(by['Done']!.hpbCheckedAt).toBeNull();
   });
 });

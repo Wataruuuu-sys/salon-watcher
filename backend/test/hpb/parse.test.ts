@@ -9,17 +9,17 @@ describe('parseSearchResults', () => {
     const hits = parseSearchResults(fx('hair-listed.html'));
     expect(hits).not.toBeNull();
     expect(hits!.length).toBe(3);
-    expect(hits![0].name).toContain('Re:chill');
-    expect(hits![0].url).toBe('https://beauty.hotpepper.jp/slnH000762323/');
-    expect(hits![0].address).toContain('北山駅');
+    expect(hits![0]!.name).toContain('Re:chill');
+    expect(hits![0]!.url).toBe('https://beauty.hotpepper.jp/slnH000762323/');
+    expect(hits![0]!.address).toContain('北山駅');
   });
 
   it('parses the kirei (nail/eye/esthe/relax) result list', () => {
     const hits = parseSearchResults(fx('kirei-listed.html'));
     expect(hits!.length).toBe(3);
-    expect(hits![0].name).toContain('Happinail');
-    expect(hits![0].url).toBe('https://beauty.hotpepper.jp/kr/slnH000696034/');
-    expect(hits![0].address).toContain('祇園四条駅');
+    expect(hits![0]!.name).toContain('Happinail');
+    expect(hits![0]!.url).toBe('https://beauty.hotpepper.jp/kr/slnH000696034/');
+    expect(hits![0]!.address).toContain('祇園四条駅');
   });
 
   it('returns [] for the explicit zero-result pages', () => {
