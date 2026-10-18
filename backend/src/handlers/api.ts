@@ -131,6 +131,16 @@ function parseBody(event: ApiEvent): { ok: true; value: unknown } | { ok: false 
   }
 }
 
+/** The web client sends a Cognito access token, which carries `username` (and `sub`) but no `email`. */
+function updatedBy(event: ApiEvent): string {
+  const claims = event.requestContext?.authorizer?.jwt?.claims ?? {};
+  for (const key of ['username', 'sub']) {
+    const v = claims[key];
+    if (typeof v === 'string' && v !== '') return v;
+  }
+  return 'unknown';
+}
+
 export async function handleApi(db: Db, event: ApiEvent, now: Date = new Date()): Promise<ApiResult> {
   switch (event.routeKey) {
     case 'GET /leads': {
@@ -153,8 +163,7 @@ export async function handleApi(db: Db, event: ApiEvent, now: Date = new Date())
       if (!Array.isArray(queries) || !queries.every((q) => typeof q === 'string')) {
         return json(400, { error: 'queries は文字列の配列にしてください' });
       }
-      const email = event.requestContext?.authorizer?.jwt?.claims?.email;
-      const result = await saveThreadsQueries(db, queries, typeof email === 'string' ? email : 'unknown');
+      const result = await saveThreadsQueries(db, queries, updatedBy(event));
       if (!result.ok) return json(400, { error: result.error });
       return json(200, await getThreadsQueriesView(db));
     }

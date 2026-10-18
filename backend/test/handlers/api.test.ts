@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { getTestDb, resetDb } from '../helpers/db.js';
-import { evidence, rawItems, stores } from '../../src/db/schema.js';
+import { evidence, rawItems, settings, stores } from '../../src/db/schema.js';
 import { handleApi, listLeads, type ApiEvent } from '../../src/handlers/api.js';
 
 const db = await getTestDb();
@@ -58,12 +58,17 @@ describe('listLeads', () => {
   });
 });
 
-function ev(routeKey: string, body?: unknown, qs?: Record<string, string>): ApiEvent {
+function ev(
+  routeKey: string,
+  body?: unknown,
+  qs?: Record<string, string>,
+  claims: Record<string, unknown> = { username: 'owner-user', sub: 'sub-1' },
+): ApiEvent {
   return {
     routeKey,
     queryStringParameters: qs,
     body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
-    requestContext: { authorizer: { jwt: { claims: { email: 'me@example.com' } } } },
+    requestContext: { authorizer: { jwt: { claims } } },
   } as unknown as ApiEvent;
 }
 
@@ -87,6 +92,16 @@ describe('handleApi', () => {
 
     const del = await handleApi(db, ev('DELETE /settings/threads-queries'));
     expect(JSON.parse(del.body).source).toBe('default');
+  });
+  it('records updatedBy from the access token username, falling back to sub then unknown', async () => {
+    const who = async (claims: Record<string, unknown>) => {
+      await handleApi(db, ev('PUT /settings/threads-queries', { queries: ['a'] }, undefined, claims));
+      const [row] = await db.select().from(settings);
+      return row!.updatedBy;
+    };
+    expect(await who({ username: 'owner-user', sub: 'sub-1' })).toBe('owner-user');
+    expect(await who({ sub: 'sub-1' })).toBe('sub-1');
+    expect(await who({})).toBe('unknown');
   });
   it('400 on invalid JSON / bad shape, 404 on unknown route', async () => {
     expect((await handleApi(db, ev('PUT /settings/threads-queries', '{oops'))).statusCode).toBe(400);
