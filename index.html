@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<!-- 地図: Leaflet + OpenStreetMap (APIキー不要・無料)。スイープログのセル可視化に使用 -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<style>
+  :root {
+    --bg: #f3f4f7;
+    --card: #ffffff;
+    --ink: #1b1e24;
+    --muted: #6d7380;
+    --line: #e5e7ec;
+    --accent: #b8285c;
+    --accent-soft: #fbeef3;
+    --ok: #0f6e56;
+    --ok-soft: #e1f5ee;
+    --gray-soft: #eef0f3;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans JP', 'Hiragino Sans', sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    padding: 32px 20px 64px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  /* ---- ヘッダー ---- */
+  header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 28px;
+  }
+  .eyebrow {
+    font-size: 12px; font-weight: 500; letter-spacing: .14em;
+    color: var(--accent); margin-bottom: 6px;
+  }
+  h1 { font-size: 26px; font-weight: 700; letter-spacing: .01em; }
+  .lastrun { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+  .run-btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: var(--ink); color: #fff; border: none; cursor: pointer;
+    font: inherit; font-weight: 500; font-size: 14px;
+    padding: 12px 22px; border-radius: 999px;
+    transition: background .15s, transform .1s;
+  }
+  .run-btn:hover:not(:disabled) { background: var(--accent); }
+  .run-btn:active:not(:disabled) { transform: scale(.98); }
+  .run-btn:disabled { opacity: .55; cursor: default; }
+  .spinner {
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.35); border-top-color: #fff;
+    animation: spin .7s linear infinite; display: none;
+  }
+  .run-btn.loading .spinner { display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+
+  /* ---- 統計 ---- */
+  .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+  .stat {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px 20px; min-width: 150px; flex: 1;
+  }
+  .stat .num { font-size: 28px; font-weight: 700; line-height: 1.2; }
+  .stat .num.accent { color: var(--accent); }
+  .stat .label { font-size: 12px; color: var(--muted); }
+
+  /* ---- フィルタ ---- */
+  .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
+  .toolbar h2 { font-size: 15px; font-weight: 500; }
+  .seg { display: inline-flex; background: var(--gray-soft); border-radius: 999px; padding: 3px; }
+  .seg button {
+    border: none; background: transparent; cursor: pointer; font: inherit;
+    font-size: 13px; padding: 6px 14px; border-radius: 999px; color: var(--muted);
+  }
+  .seg button.on { background: var(--card); color: var(--ink); font-weight: 500; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+  /* ---- テーブル ---- */
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 16px; overflow: hidden;
+  }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; min-width: 880px; }
+  th {
+    text-align: left; font-size: 12px; font-weight: 500; color: var(--muted);
+    padding: 12px 16px; border-bottom: 1px solid var(--line);
+    background: #fafbfc; white-space: nowrap;
+  }
+  td { padding: 14px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #fafbfd; }
+  .name { font-weight: 500; }
+  .addr { font-size: 12px; color: var(--muted); margin-top: 2px; max-width: 280px; }
+  .name a { color: inherit; text-decoration: none; }
+  .name a:hover { color: var(--accent); }
+  td a.site { color: var(--accent); font-size: 13px; text-decoration: none; word-break: break-all; }
+  td a.site:hover { text-decoration: underline; }
+  .time { font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .genre {
+    display: inline-block; font-size: 12px; color: var(--muted);
+    background: var(--gray-soft); padding: 2px 10px; border-radius: 999px;
+    white-space: nowrap;
+  }
+  .area { white-space: nowrap; }
+  .area .city { display: block; font-size: 12px; color: var(--muted); }
+  .odate { font-size: 13px; white-space: nowrap; }
+  .pill {
+    display: inline-block; font-size: 12px; font-weight: 500;
+    padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+  }
+  .pill.unlisted { background: var(--accent-soft); color: var(--accent); }
+  .pill.listed { background: var(--ok-soft); color: var(--ok); }
+  .pill.unknown { background: var(--gray-soft); color: var(--muted); }
+  .pill.future { background: #eef3ff; color: #2a5bd7; margin-top: 4px; }
+
+  /* ---- タブ ---- */
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+  .tab {
+    border: none; background: transparent; cursor: pointer; font: inherit;
+    font-size: 14px; padding: 10px 18px; color: var(--muted);
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab.on { color: var(--ink); font-weight: 500; border-bottom-color: var(--accent); }
+  .panel { display: none; }
+  .panel.on { display: block; }
+
+  /* ---- スイープログの状態バッジ ---- */
+  .stt { display: inline-block; font-size: 12px; font-weight: 500; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+  .stt.saturated { background: var(--accent-soft); color: var(--accent); }
+  .stt.low { background: var(--gray-soft); color: var(--muted); }
+  .stt.ok { background: var(--ok-soft); color: var(--ok); }
+  .num-cell { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .num-cell.sat { color: var(--accent); font-weight: 500; }
+  .log-note { font-size: 13px; color: var(--muted); margin-bottom: 12px; line-height: 1.7; }
+
+  /* ---- リクエスト予算メーター ---- */
+  .budget { margin-bottom: 18px; }
+  .budget-track { height: 8px; background: var(--gray-soft); border-radius: 999px; overflow: hidden; }
+  .budget-fill { height: 100%; width: 0; background: var(--ok); border-radius: 999px; transition: width .35s ease; }
+  .budget-fill.warn { background: var(--accent); }
+  .budget-label { font-size: 12px; color: var(--muted); margin-top: 7px; }
+  .budget-label b { color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .budget-label b.over { color: var(--accent); }
+
+  /* ---- セル地図 ---- */
+  .map-card { padding: 0; overflow: hidden; margin-bottom: 20px; }
+  #logMap { height: 440px; width: 100%; background: #e9edf1; }
+  .leaflet-popup-content { font-family: inherit; font-size: 13px; line-height: 1.6; }
+  .map-legend { display: flex; gap: 16px; flex-wrap: wrap; padding: 12px 16px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .map-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+  /* ---- ヒートマップ表 (セル × ジャンル) ---- */
+  .mx { font-variant-numeric: tabular-nums; text-align: center; white-space: nowrap; }
+  .mx.saturated { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+  .mx.tight { background: #fff5e2; color: #b57a00; font-weight: 500; }
+  .mx.low { color: var(--muted); }
+  .m-cell-name { white-space: nowrap; font-weight: 500; }
+  #logTbl th:first-child, #logTbl td:first-child { text-align: left; position: sticky; left: 0; background: #fafbfc; }
+  #logTbl td:first-child { background: var(--card); }
+
+  .empty {
+    text-align: center; padding: 56px 20px; color: var(--muted); font-size: 14px;
+  }
+  .empty strong { display: block; font-size: 16px; color: var(--ink); font-weight: 500; margin-bottom: 6px; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+    background: var(--ink); color: #fff; font-size: 13px;
+    padding: 10px 20px; border-radius: 999px; opacity: 0;
+    pointer-events: none; transition: opacity .25s;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">SALON WATCHER / 国分寺・立川・八王子・府中・調布・多摩</div>
+      <h1>新店サロン検出</h1>
+      <div class="lastrun">最終自動実行:<span id="lastAuto">—</span> / 最終手動実行:<span id="lastRun">—</span></div>
+    </div>
+    <button class="run-btn" id="runBtn" onclick="runNow()">
+      <span class="spinner"></span><span id="runLabel">今すぐ実行</span>
+    </button>
+  </header>
+
+  <div class="tabs">
+    <button id="tabStores" class="tab on" onclick="switchTab('stores')">新店リスト</button>
+    <button id="tabLog" class="tab" onclick="switchTab('log')">スイープログ</button>
+  </div>
+
+  <div id="panelStores" class="panel on">
+  <div class="stats">
+    <div class="stat"><div class="num" id="statTotal">–</div><div class="label">前日・当日の新店</div></div>
+    <div class="stat"><div class="num accent" id="statZeroReview">–</div><div class="label">うち口コミ0件(開店直後サイン)</div></div>
+    <div class="stat"><div class="num" id="statFuture" style="color:#2a5bd7">–</div><div class="label">うち🔜オープン予定</div></div>
+  </div>
+
+  <div class="toolbar">
+    <h2>前日・当日の新店舗</h2>
+    <div class="seg">
+      <button id="segAll" class="on" onclick="setFilter('all')">すべて</button>
+      <button id="segFuture" onclick="setFilter('future')">オープン予定のみ</button>
+      <button id="segZero" onclick="setFilter('zero')">口コミ0件のみ</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="table-scroll">
+      <table id="tbl" style="display:none">
+        <thead>
+          <tr>
+            <th>店舗名</th><th>ジャンル</th><th>エリア</th>
+            <th>サイトURL</th><th>開業日</th><th>口コミ</th><th>HPB確認</th><th>検出時刻</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="empty">
+      <strong>読み込み中…</strong>
+    </div>
+  </div>
+  </div>
+
+  <div id="panelLog" class="panel">
+    <div class="log-note">
+      直近スイープ(<span id="logRanAt">—</span>)の<b>セル×ジャンル別</b>取得件数です。
+      <b style="color:var(--accent)">飽和</b>=60件上限(公式仕様の天井)に到達=取りこぼしの疑い→そのセルを狭く分割。
+      <b style="color:#b57a00">余裕少</b>=2ページ以上使用。
+      <span style="color:var(--muted)">過少</span>=件数わずか(近隣セルと統合の余地)。
+      地図のセルをクリックするとジャンル内訳が見られます。
+    </div>
+
+    <div class="budget">
+      <div class="budget-track"><div class="budget-fill" id="budgetFill"></div></div>
+      <div class="budget-label">
+        今回スイープ <b id="budgetUsed">–</b> リクエスト / 無料枠の日次目安 <span id="budgetMax">–</span> 回
+        <span id="budgetHint"></span>
+      </div>
+    </div>
+
+    <div class="card map-card">
+      <div id="logMap"></div>
+      <div class="map-legend">
+        <span><i class="swatch" style="background:#b8285c"></i>飽和(60到達・要分割)</span>
+        <span><i class="swatch" style="background:#d99000"></i>余裕少(2ページ以上)</span>
+        <span><i class="swatch" style="background:#0f6e56"></i>適正</span>
+        <span><i class="swatch" style="background:#9aa0ab"></i>過少</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="table-scroll">
+        <table id="logTbl" style="display:none">
+          <thead><tr id="logHead"></tr></thead>
+          <tbody id="logBody"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="logEmpty">
+        <strong>スイープログがまだありません</strong>「今すぐ実行」を押すと直近の取得件数が記録されます。
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  let allStores = [];
+  let filter = 'all';
+  let statsLoaded = false;
+
+  function load() {
+    google.script.run.withSuccessHandler(onData).withFailureHandler(onError).getRecentStores();
+  }
+
+  function switchTab(which) {
+    const isStores = which === 'stores';
+    document.getElementById('tabStores').classList.toggle('on', isStores);
+    document.getElementById('tabLog').classList.toggle('on', !isStores);
+    document.getElementById('panelStores').classList.toggle('on', isStores);
+    document.getElementById('panelLog').classList.toggle('on', !isStores);
+    if (!isStores && !statsLoaded) loadStats();
+  }
+
+  function loadStats() {
+    google.script.run.withSuccessHandler(onStats).withFailureHandler(function(){}).getSweepStats();
+  }
+
+  let logMap = null;    // Leaflet マップ (初回のみ生成)
+  let logLayer = null;  // セル矩形のレイヤーグループ (再描画時にクリア)
+
+  function onStats(data) {
+    statsLoaded = true;
+    document.getElementById('logRanAt').textContent = data.ranAt || '—';
+    const rows = data.rows || [];
+
+    renderBudget(data.totalRequests || 0, data.budget || 333);
+
+    const tbl = document.getElementById('logTbl');
+    const empty = document.getElementById('logEmpty');
+    if (rows.length === 0) {
+      tbl.style.display = 'none';
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+    tbl.style.display = 'table';
+
+    // セル単位に集約 (ジャンル横断の最悪状態と、ジャンル別の内訳を作る)
+    const genres = [];
+    const cellOrder = [];
+    const cellMap = {};
+    rows.forEach(r => {
+      if (genres.indexOf(r.genre) < 0) genres.push(r.genre);
+      if (!cellMap[r.cellId]) {
+        cellMap[r.cellId] = {
+          cellId: r.cellId, area: r.area, cellIndex: r.cellIndex,
+          low: r.low, high: r.high, byGenre: {}, worst: 0,
+        };
+        cellOrder.push(r.cellId);
+      }
+      const c = cellMap[r.cellId];
+      c.byGenre[r.genre] = r;
+      c.worst = Math.max(c.worst, sev(r.status));
+    });
+
+    renderMatrix(genres, cellOrder, cellMap);
+    renderMap(cellOrder, cellMap);
+  }
+
+  function renderBudget(used, budget) {
+    const over = used > budget;
+    const usedEl = document.getElementById('budgetUsed');
+    usedEl.textContent = used;
+    usedEl.classList.toggle('over', over);
+    document.getElementById('budgetMax').textContent = budget;
+    const fill = document.getElementById('budgetFill');
+    fill.style.width = Math.min(100, Math.round(used / budget * 100)) + '%';
+    fill.classList.toggle('warn', over);
+    document.getElementById('budgetHint').textContent =
+      over ? '(目安超過:飽和セルの分割よりも過少セルの統合を検討)' : '';
+  }
+
+  // 状態の深刻度: saturated > tight > ok > low
+  function sev(status) {
+    return status === 'saturated' ? 3 : status === 'tight' ? 2 : status === 'low' ? 0 : 1;
+  }
+  function sevColor(n) {
+    return n === 3 ? '#b8285c' : n === 2 ? '#d99000' : n === 0 ? '#9aa0ab' : '#0f6e56';
+  }
+
+  function renderMatrix(genres, cellOrder, cellMap) {
+    const head = document.getElementById('logHead');
+    head.innerHTML = '';
+    head.appendChild(th('セル'));
+    genres.forEach(g => head.appendChild(th(g)));
+
+    const body = document.getElementById('logBody');
+    body.innerHTML = '';
+    cellOrder.forEach(cid => {
+      const c = cellMap[cid];
+      const tr = document.createElement('tr');
+      const name = document.createElement('td');
+      name.className = 'm-cell-name';
+      name.textContent = c.area + ' #' + (c.cellIndex + 1);
+      tr.appendChild(name);
+      genres.forEach(g => {
+        const r = c.byGenre[g];
+        const cell = document.createElement('td');
+        cell.className = 'mx' + (r ? ' ' + r.status : '');
+        cell.textContent = r ? r.count : '–';
+        if (r) cell.title = g + ': ' + r.count + '件 / ' + r.pagesUsed + 'ページ';
+        tr.appendChild(cell);
+      });
+      body.appendChild(tr);
+    });
+  }
+
+  function renderMap(cellOrder, cellMap) {
+    if (typeof L === 'undefined') return; // Leaflet未ロード時は地図をスキップ
+    if (!logMap) {
+      logMap = L.map('logMap', {
+        scrollWheelZoom: false,           // PC: ページのスクロールを奪わない (+/-ボタンで拡大)
+        touchZoom: true,                  // スマホ: 2本指ピンチ/スワイプでのズームを有効化
+        dragging: true,
+        center: [35.685, 139.44], zoom: 11, // fitBounds前の保険 (多摩エリア。世界地図化を防ぐ)
+      });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 18, attribution: '© OpenStreetMap contributors',
+      }).addTo(logMap);
+      logLayer = L.layerGroup().addTo(logMap);
+    }
+    logLayer.clearLayers();
+
+    const all = [];
+    cellOrder.forEach(cid => {
+      const c = cellMap[cid];
+      const bounds = [[c.low.lat, c.low.lng], [c.high.lat, c.high.lng]];
+      all.push([c.low.lat, c.low.lng], [c.high.lat, c.high.lng]);
+      const color = sevColor(c.worst);
+      const rect = L.rectangle(bounds, { color: color, weight: 2, fillOpacity: 0.18 });
+      let html = '<b>' + c.area + ' #' + (c.cellIndex + 1) + '</b><br>';
+      Object.keys(c.byGenre).forEach(g => {
+        const r = c.byGenre[g];
+        const mark = r.status === 'saturated' ? ' ⚠️飽和' : r.status === 'tight' ? ' (余裕少)' : '';
+        html += g + ': ' + r.count + '件 / ' + r.pagesUsed + 'p' + mark + '<br>';
+      });
+      rect.bindPopup(html);
+      logLayer.addLayer(rect);
+    });
+
+    // 「サイズ確定 → フィット」の順で実行する。タブが非表示のまま初期化されて
+    // コンテナが0pxでも、表示後にサイズを測り直してからキャプチャ範囲へズームする
+    setTimeout(function () {
+      logMap.invalidateSize();
+      if (all.length) logMap.fitBounds(all, { padding: [24, 24] });
+    }, 80);
+  }
+
+  function th(text) {
+    const el = document.createElement('th');
+    el.textContent = text;
+    return el;
+  }
+
+  function onData(data) {
+    allStores = data.stores || [];
+    document.getElementById('lastRun').textContent = data.lastRun || '—';
+    document.getElementById('lastAuto').textContent = data.lastAuto || '—';
+    render();
+  }
+
+  // オープン予定(まだ開店していない)判定: businessStatus か、開業日が今日より先
+  function todayStr() {
+    const d = new Date();
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  }
+  function isFutureOpening(s) {
+    if (s.businessStatus === 'FUTURE_OPENING') return true;
+    return !!s.openingDate && s.openingDate > todayStr();
+  }
+
+  function render() {
+    const zeroCount = allStores.filter(s => s.reviewCount === 0).length;
+    const futureCount = allStores.filter(isFutureOpening).length;
+    document.getElementById('statTotal').textContent = allStores.length;
+    document.getElementById('statZeroReview').textContent = zeroCount;
+    document.getElementById('statFuture').textContent = futureCount;
+
+    const rows = filter === 'zero'
+      ? allStores.filter(s => s.reviewCount === 0)
+      : filter === 'future'
+      ? allStores.filter(isFutureOpening)
+      : allStores;
+
+    const tbl = document.getElementById('tbl');
+    const empty = document.getElementById('empty');
+    const tbody = document.getElementById('tbody');
+    tbody.innerHTML = '';
+
+    if (rows.length === 0) {
+      tbl.style.display = 'none';
+      empty.style.display = 'block';
+      empty.innerHTML = '<strong>前日・当日の新店はまだありません</strong>次回の自動実行(毎朝7時)か、「今すぐ実行」で最新をチェックできます。';
+      return;
+    }
+    empty.style.display = 'none';
+    tbl.style.display = 'table';
+
+    rows.forEach(s => {
+      const tr = document.createElement('tr');
+      tr.appendChild(cellName(s));
+      tr.appendChild(cellGenre(s.genre));
+      tr.appendChild(cellArea(s));
+      tr.appendChild(cellSite(s.website));
+      tr.appendChild(cellDate(s.openingDate));
+      tr.appendChild(cellReviews(s.reviewCount));
+      tr.appendChild(cellHpb(s.name));
+      tr.appendChild(cellTime(s.detectedAt));
+      tbody.appendChild(tr);
+    });
+  }
+
+  function cellName(s) {
+    const td = document.createElement('td');
+    const div = document.createElement('div');
+    div.className = 'name';
+    if (s.mapsUrl) {
+      const a = document.createElement('a');
+      a.href = s.mapsUrl; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = s.name;
+      div.appendChild(a);
+    } else {
+      div.textContent = s.name;
+    }
+    td.appendChild(div);
+    if (isFutureOpening(s)) {
+      const badge = document.createElement('span');
+      badge.className = 'pill future';
+      badge.textContent = '🔜 オープン予定' + (s.openingDate ? '(' + s.openingDate + ')' : '');
+      td.appendChild(badge);
+    }
+    if (s.address) {
+      const addr = document.createElement('div');
+      addr.className = 'addr';
+      addr.textContent = s.address.replace(/^日本、?/, '');
+      td.appendChild(addr);
+    }
+    return td;
+  }
+
+  function cellGenre(genre) {
+    const td = document.createElement('td');
+    if (genre) {
+      const span = document.createElement('span');
+      span.className = 'genre';
+      span.textContent = genre;
+      td.appendChild(span);
+    } else {
+      td.textContent = '—';
+    }
+    return td;
+  }
+
+  function cellArea(s) {
+    const td = document.createElement('td');
+    td.className = 'area';
+    td.textContent = s.area || '—';
+    if (s.city) {
+      const city = document.createElement('span');
+      city.className = 'city';
+      city.textContent = s.city;
+      td.appendChild(city);
+    }
+    return td;
+  }
+
+  function cellSite(url) {
+    const td = document.createElement('td');
+    if (url) {
+      const a = document.createElement('a');
+      a.className = 'site'; a.href = url; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+      td.appendChild(a);
+    } else {
+      td.textContent = '—';
+      td.style.color = 'var(--muted)';
+    }
+    return td;
+  }
+
+  function cellDate(d) {
+    const td = document.createElement('td');
+    td.className = 'odate';
+    td.textContent = d || '—';
+    if (!d) td.style.color = 'var(--muted)';
+    return td;
+  }
+
+  function cellReviews(n) {
+    const td = document.createElement('td');
+    td.className = 'odate';
+    if (n === null || n === undefined) {
+      td.textContent = '—';
+      td.style.color = 'var(--muted)';
+    } else {
+      td.textContent = n + '件';
+      // 口コミ0件 = 開店直後の可能性が高いサイン
+      if (n === 0) { td.style.color = 'var(--accent)'; td.style.fontWeight = '500'; }
+    }
+    return td;
+  }
+
+  function cellHpb(name) {
+    // HPB掲載の自動判定は廃止。site:beauty.hotpepper.jp のGoogle検索リンクで手動確認する
+    const td = document.createElement('td');
+    const a = document.createElement('a');
+    a.className = 'site';
+    a.href = 'https://www.google.com/search?q='
+      + encodeURIComponent('site:beauty.hotpepper.jp "' + name + '"');
+    a.target = '_blank'; a.rel = 'noopener';
+    a.textContent = 'HPBで検索 ↗';
+    td.appendChild(a);
+    return td;
+  }
+
+  function cellTime(t) {
+    const td = document.createElement('td');
+    td.className = 'time';
+    td.textContent = t;
+    return td;
+  }
+
+  function setFilter(f) {
+    filter = f;
+    document.getElementById('segAll').classList.toggle('on', f === 'all');
+    document.getElementById('segFuture').classList.toggle('on', f === 'future');
+    document.getElementById('segZero').classList.toggle('on', f === 'zero');
+    render();
+  }
+
+  function runNow() {
+    const btn = document.getElementById('runBtn');
+    btn.disabled = true;
+    btn.classList.add('loading');
+    document.getElementById('runLabel').textContent = '実行中…';
+    google.script.run
+      .withSuccessHandler(function(summary) {
+        resetBtn();
+        let msg = '完了:新店 ' + summary.newCount + '件 / 口コミ0件 ' + summary.zeroReviewCount + '件'
+          + (summary.futureOpeningCount ? ' / 🔜オープン予定 ' + summary.futureOpeningCount + '件' : '');
+        if (summary.deferredCount > 0) msg += '(' + summary.deferredCount + '件は翌日処理)';
+        if (summary.mode === 'seeding') msg = '台帳登録:' + summary.seededCount + '件(シーディング)';
+        toast(msg);
+        load();
+        statsLoaded = false;
+        if (document.getElementById('panelLog').classList.contains('on')) loadStats();
+      })
+      .withFailureHandler(function(err) {
+        resetBtn();
+        toast('エラー:' + (err && err.message ? err.message : '実行に失敗しました'));
+      })
+      .runBatchManual();
+  }
+
+  function resetBtn() {
+    const btn = document.getElementById('runBtn');
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    document.getElementById('runLabel').textContent = '今すぐ実行';
+  }
+
+  function onError(err) {
+    document.getElementById('empty').innerHTML =
+      '<strong>読み込みに失敗しました</strong>' + (err && err.message ? err.message : 'ページを再読み込みしてください。');
+  }
+
+  let toastTimer;
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function() { el.classList.remove('show'); }, 3500);
+  }
+
+  load();
+</script>
+</body>
+</html>
