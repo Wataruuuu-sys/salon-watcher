@@ -2,7 +2,7 @@
   "name": "salon-watcher",
   "private": true,
   "version": "4.0.0",
-  "workspaces": ["backend", "web"],
+  "workspaces": ["backend", "web", "infra"],
   "scripts": {
     "test": "npm -w backend test"
   },

@@ -1,0 +1,10 @@
+{
+  "app": "npx tsx bin/app.ts",
+  "context": {
+    "ownerEmail": "owner@example.com",
+    "notifyFrom": "noreply@example.com",
+    "notifyTo": "owner@example.com",
+    "cognitoDomainPrefix": "salon-watcher-dev",
+    "sourcesDisabled": ""
+  }
+}
