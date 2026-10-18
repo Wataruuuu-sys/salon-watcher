@@ -5,7 +5,7 @@ export const TAMA_CITIES: readonly string[] = [
   'あきる野市', '西東京市',
 ];
 
-export const TAMA_BBOX = { south: 35.57, north: 35.84, west: 139.02, east: 139.60 };
+export const TAMA_BBOX = { south: 35.49, north: 35.87, west: 139.02, east: 139.62 };
 
 const CITIES_LONGEST_FIRST = [...TAMA_CITIES].sort((a, b) => b.length - a.length);
 

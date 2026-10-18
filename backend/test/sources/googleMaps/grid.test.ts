@@ -38,6 +38,21 @@ describe('grid', () => {
     }
   });
 
+  it('TAMA_BBOX covers 町田 south and 青梅 north edges', () => {
+    expect(TAMA_BBOX).toEqual({ south: 35.49, north: 35.87, west: 139.02, east: 139.62 });
+  });
+
+  it.each([
+    ['町田駅', 35.5424, 139.4466],
+    ['青梅駅', 35.7907, 139.2583],
+  ])('%s is inside some baseGrid cell bounds', (_name, lat, lng) => {
+    const inside = baseGrid().some((c) => {
+      const b = cellBounds(c);
+      return lat >= b.low.lat && lat <= b.high.lat && lng >= b.low.lng && lng <= b.high.lng;
+    });
+    expect(inside).toBe(true);
+  });
+
   describe('ensureCells', () => {
     beforeEach(async () => resetDb(await getTestDb()));
 
