@@ -44,14 +44,14 @@ describe('checkHpb', () => {
   it('zero results on every endpoint -> not_listed; queries all endpoints with a pause between', async () => {
     const pages = [fx('hair-empty.html'), fx('kirei-empty.html')];
     let i = 0;
-    const http = vi.fn(async () => html(pages[i++ < 1 ? 0 : 1])) as unknown as typeof fetch;
+    const http = vi.fn(async () => html(pages[i++ < 1 ? 0 : 1]!)) as unknown as typeof fetch;
     const sleep = vi.fn(async () => {});
     expect(await checkHpb(store, http, sleep)).toEqual({ status: 'not_listed', url: null });
     const urls = vi.mocked(http).mock.calls.map((c) => String(c[0]));
     expect(urls.length).toBeGreaterThanOrEqual(2);
-    expect(urls[0]).toContain('/CSP/bt/salonSearch/search/');
-    expect(urls[1]).toContain('/CSP/kr/salonSearch/search/');
-    expect(urls[0]).toContain('freeword=');
+    expect(urls[0]!).toContain('/CSP/bt/salonSearch/search/');
+    expect(urls[1]!).toContain('/CSP/kr/salonSearch/search/');
+    expect(urls[0]!).toContain('freeword=');
     expect(sleep).toHaveBeenCalledTimes(urls.length - 1);
   });
 

@@ -45,10 +45,10 @@ export async function checkHpb(
 
   let failed = false;
   const urls = searchUrls(store.name);
-  for (let i = 0; i < urls.length; i++) {
+  for (const [i, url] of urls.entries()) {
     if (i > 0) await sleep(INTERVAL_MS);
     try {
-      const res = await http(urls[i], {
+      const res = await http(url, {
         headers: { 'User-Agent': USER_AGENT, 'Accept-Language': 'ja' },
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
