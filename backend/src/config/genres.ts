@@ -10,4 +10,7 @@ export const GENRES: { id: Genre; label: string; mapsQueries: string[]; threadsW
 ];
 
 /** Words used by the prefilter to detect opening announcements. */
-export const OPEN_WORDS = ['オープン', 'OPEN', '新店', '開業', 'グランドオープン', 'プレオープン', 'NEW OPEN'];
+export const OPEN_WORDS = [
+  'オープン', 'OPEN', '新店', '開業', 'グランドオープン', 'プレオープン', 'NEW OPEN',
+  '開店', '開院', '移転', 'リニューアル', 'オープン予定',
+];
