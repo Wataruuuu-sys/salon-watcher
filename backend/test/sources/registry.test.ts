@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { enabledSources, getSource, registerSource } from '../../src/sources/registry.js';
+import type { SourceId } from '../../src/domain/types.js';
 import type { Source } from '../../src/sources/types.js';
 
 describe('registry', () => {
@@ -13,7 +14,7 @@ describe('registry', () => {
   });
 
   it('throws for an unregistered source and returns a registered one', () => {
-    expect(() => getSource('threads')).toThrow(/threads/);
+    expect(() => getSource('nope' as SourceId)).toThrow(/nope/);
     const stub: Source = {
       id: 'threads',
       listShards: async () => ['s'],

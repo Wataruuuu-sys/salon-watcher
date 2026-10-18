@@ -1,6 +1,7 @@
 import type { SourceId } from '../domain/types.js';
 import type { Source } from './types.js';
 import { googleMapsSource } from './googleMaps/source.js';
+import { threadsSource } from './threads/source.js';
 
 const ALL_SOURCES: SourceId[] = ['google_maps', 'threads'];
 
@@ -30,3 +31,4 @@ export function getSource(id: SourceId): Source {
 }
 
 registerSource(googleMapsSource);
+registerSource(threadsSource);
