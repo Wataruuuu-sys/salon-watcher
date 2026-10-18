@@ -38,6 +38,7 @@ describe('googleMapsSource', () => {
     searchIds: async () => ({ ids: [] }),
     details: async (id) => {
       fetched.push(id);
+      if (id === 'boom') throw new Error('network');
       return id in table ? table[id]! : detail(id);
     },
   };
@@ -105,5 +106,13 @@ describe('googleMapsSource', () => {
     const rows = await db.select().from(mapCells).where(eq(mapCells.genre, 'nail'));
     expect(rows.length).toBeGreaterThan(100);
     expect(rows.every((r) => r.seeded)).toBe(true);
+  });
+
+  it('a throwing details lookup does not lose the other candidates', async () => {
+    await candidates(db, ['a', 'boom', 'c']);
+    const items = await source.collect('hair', ctxFor(db));
+    expect(items.map((i) => i.externalId)).toEqual(['a', 'c']);
+    const rows = Object.fromEntries((await db.select().from(placesSeen)).map((r) => [r.placeId, r.detailsFetched]));
+    expect(rows).toEqual({ a: true, boom: false, c: true });
   });
 });

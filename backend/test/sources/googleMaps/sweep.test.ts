@@ -85,9 +85,9 @@ describe('sweepGenre', () => {
 
   it('subdivides when any one query of the genre saturates; stops at max depth', async () => {
     await addCells(db, 'eye', [A]);
-    const client = fakeClient((q, c) => (q === '眉毛サロン' ? range('m', 60) : c.radiusM >= 0 ? ['x'] : []));
+    const client = fakeClient((q, c) => (q === '眉毛サロン' ? range('m', 60) : ['x']));
     const r = await sweepGenre(db, client, 'eye', { maxSubdivideDepth: 1 });
-    expect(r.subdivided).toBe(1 + 0);
+    expect(r.subdivided).toBe(1);
     // children also saturate on the eyebrow query but depth cap (1) prevents further splitting
     const cells = await db.select().from(mapCells);
     expect(cells.filter((c) => c.active)).toHaveLength(4);
@@ -111,5 +111,20 @@ describe('sweepGenre', () => {
     const client = fakeClient(() => ['z']);
     await sweepGenre(db, client, 'hair');
     expect(client.calls).toBe(1);
+  });
+
+  it('survives a failing search: other cells proceed, the failed unseeded cell stays unseeded', async () => {
+    await addCells(db, 'hair', [A, B]);
+    const client = fakeClient((_q, c) => (isA(c) ? ['a1'] : ['b1']));
+    const base = client.searchIds.bind(client);
+    client.searchIds = async (q, c, t) => {
+      if (isA(c)) throw new Error('boom');
+      return base(q, c, t);
+    };
+    const r = await sweepGenre(db, client, 'hair');
+    expect(r.newIds).toBe(1);
+    const cells = await db.select().from(mapCells);
+    expect(cells.find((c) => c.lng === A.lng)!.seeded).toBe(false);
+    expect(cells.find((c) => c.lng === B.lng)!.seeded).toBe(true);
   });
 });

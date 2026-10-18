@@ -28,7 +28,7 @@ export function createGoogleMapsSource(makeClient: MakeClient = placesClient): S
       const client = makeClient(await ctx.secrets.get('PLACES_API_KEY'), ctx.http);
 
       await ensureCells(ctx.db, genre);
-      const sweep = await sweepGenre(ctx.db, client, genre);
+      const sweep = await sweepGenre(ctx.db, client, genre, { log: ctx.log });
       ctx.log.info('maps sweep done', { genre, ...sweep });
 
       const pending = await ctx.db
@@ -40,8 +40,14 @@ export function createGoogleMapsSource(makeClient: MakeClient = placesClient): S
 
       const items: RawItemInput[] = [];
       for (const { placeId } of pending) {
-        const d = await client.details(placeId);
-        if (!d) continue; // retried next run
+        let d: Awaited<ReturnType<PlacesClient['details']>>;
+        try {
+          d = await client.details(placeId);
+        } catch (err) {
+          ctx.log.warn('maps details failed', { placeId, error: String(err) });
+          d = null;
+        }
+        if (!d) continue; // stays unfetched, retried next run
         await ctx.db.update(placesSeen).set({ detailsFetched: true }).where(eq(placesSeen.placeId, placeId));
         const city = cityFromAddress(d.address);
         if (d.businessStatus === 'CLOSED_PERMANENTLY' || city === null) continue;

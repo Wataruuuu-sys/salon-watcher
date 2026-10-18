@@ -4,6 +4,7 @@ import { mapCells, placesSeen } from '../../db/schema.js';
 import type { Genre } from '../../domain/types.js';
 import { GENRES } from '../../config/genres.js';
 import { subdivide, type Cell } from './grid.js';
+import type { Logger } from '../../lib/log.js';
 import type { PlacesClient } from './places.js';
 
 const BASE_RADIUS_M = 750;
@@ -27,7 +28,10 @@ export async function runPool<T>(items: T[], limit: number, fn: (item: T) => Pro
   const worker = async () => {
     while (next < items.length) await fn(items[next++]!);
   };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  // Wait for every worker even if one fails, then surface the first error.
+  const settled = await Promise.allSettled(Array.from({ length: Math.min(limit, items.length) }, worker));
+  const failed = settled.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+  if (failed) throw failed.reason;
 }
 
 /** Subdivision depth implied by the radius (each level halves 750 m). */
@@ -44,7 +48,7 @@ export async function sweepGenre(
   db: Db,
   client: PlacesClient,
   genre: Genre,
-  opts: { maxSubdivideDepth?: number; concurrency?: number } = {},
+  opts: { maxSubdivideDepth?: number; concurrency?: number; log?: Logger } = {},
 ): Promise<SweepResult> {
   const maxDepth = opts.maxSubdivideDepth ?? 3;
   const queries = GENRES.find((g) => g.id === genre)?.mapsQueries ?? [];
@@ -78,10 +82,21 @@ export async function sweepGenre(
   async function sweepCell(cell: CellRow): Promise<void> {
     const found = new Set<string>();
     let saturated = false;
+    let failed = false;
     for (const q of queries) {
-      const r = await searchAll(q, cell);
-      r.ids.forEach((id) => found.add(id));
-      saturated ||= r.saturated;
+      try {
+        const r = await searchAll(q, cell);
+        r.ids.forEach((id) => found.add(id));
+        saturated ||= r.saturated;
+      } catch (err) {
+        failed = true;
+        opts.log?.warn('maps search failed', { genre, cellId: cell.id, query: q, error: String(err) });
+      }
+    }
+    if (failed) {
+      // Partial data: keep what was found, but do not mark seeded or subdivide.
+      await recordIds([...found], cell.seeded);
+      return;
     }
     searched.set(cell.id, { seeded: cell.seeded, count: found.size });
     await recordIds([...found], cell.seeded);
