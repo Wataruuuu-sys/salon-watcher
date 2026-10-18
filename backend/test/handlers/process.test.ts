@@ -145,4 +145,31 @@ describe('processPending', () => {
     const rows = await db.select().from(rawItems).orderBy(rawItems.id);
     expect(rows.map((r) => r.status)).toEqual(['pending', 'resolved']);
   });
+
+  it('picks no new items once the deadline has passed', async () => {
+    await ingestRawItems(db, [threadsItem()]);
+    const { llm, calls } = fakeLlm(() => cls({ storeName: 'Lily' }));
+    expect(await processPending(db, llm, 500, { deadline: Date.now() - 1, log: { info() {}, warn() {}, error() {} } })).toEqual({
+      resolved: 0,
+      rejected: 0,
+      retried: 0,
+    });
+    expect(calls).toHaveLength(0);
+    const [raw] = await db.select().from(rawItems);
+    expect(raw!.status).toBe('pending');
+  });
+
+  it('passes the current time to the classifier', async () => {
+    await ingestRawItems(db, [threadsItem()]);
+    const seen: (Date | undefined)[] = [];
+    const llm: LlmClassifier = {
+      async classify(input) {
+        seen.push(input.now);
+        return cls({ storeName: 'Lily' });
+      },
+    };
+    await processPending(db, llm);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toBeInstanceOf(Date);
+  });
 });
