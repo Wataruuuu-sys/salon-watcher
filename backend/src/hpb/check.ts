@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { stores } from '../db/schema.js';
 import type { HpbStatus } from '../domain/types.js';
-import { matchHit, parseSearchResults } from './parse.js';
+import { matchHit, parseSearchResults, unverifiableByArea } from './parse.js';
 
 const HPB_ORIGIN = 'https://beauty.hotpepper.jp';
 
@@ -34,7 +34,8 @@ function searchUrls(name: string): string[] {
 
 /**
  * Queries every HPB endpoint serially (pause between requests). `listed` wins on the first match;
- * otherwise any failed/unparseable endpoint makes the result `unknown`; else `not_listed`.
+ * otherwise any failed/unparseable endpoint, or name matches with no access text to check the city,
+ * makes the result `unknown`; else `not_listed`.
  */
 export async function checkHpb(
   store: { name: string; city: string | null },
@@ -63,6 +64,7 @@ export async function checkHpb(
       }
       const hit = matchHit(store, hits);
       if (hit) return { status: 'listed', url: hit.url };
+      if (unverifiableByArea(store, hits)) failed = true;
     } catch {
       failed = true;
     }

@@ -43,4 +43,15 @@ describe('matchHit', () => {
   it('rejects unrelated names', () => {
     expect(matchHit({ name: 'Rose', city: null }, [hit])).toBeNull();
   });
+  it('without a city, matches only on exact normalized-name equality', () => {
+    const studio = { name: 'Lily Hair Studio', address: '八王子市', url: 'https://y/' };
+    expect(matchHit({ name: 'ネイルサロン Lily', city: null }, [studio])).toBeNull();
+    expect(matchHit({ name: 'ネイルサロン Lily', city: null }, [hit])).toBe(hit);
+  });
+  it('containment needs the shorter normalized name to be at least 4 chars', () => {
+    const garden = { name: 'Bee Garden', address: '立川市錦町', url: 'https://z/' };
+    expect(matchHit({ name: 'Bee', city: '立川市' }, [garden])).toBeNull();
+    const studio = { name: 'Lily Hair Studio', address: '立川市錦町', url: 'https://y/' };
+    expect(matchHit({ name: 'Lily', city: '立川市' }, [studio])).toBe(studio);
+  });
 });

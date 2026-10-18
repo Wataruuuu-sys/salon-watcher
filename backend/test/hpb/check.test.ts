@@ -33,6 +33,12 @@ describe('checkHpb', () => {
     expect((await checkHpb(store, http, noSleep)).status).toBe('unknown');
   });
 
+  it('city known but every name-matching hit has empty access text -> unknown', async () => {
+    const page = lilyPage().replace('立川市曙町 立川駅徒歩3分', '');
+    const http = vi.fn(async () => html(page)) as unknown as typeof fetch;
+    expect(await checkHpb(store, http, noSleep)).toEqual({ status: 'unknown', url: null });
+  });
+
   it('name variation + city match -> listed with url', async () => {
     const http = vi.fn(async () => html(lilyPage())) as unknown as typeof fetch;
     expect(await checkHpb(store, http, noSleep)).toEqual({

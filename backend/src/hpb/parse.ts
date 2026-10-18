@@ -46,16 +46,36 @@ function cleanUrl(href: string | undefined): string | null {
   }
 }
 
-/** Name match (normalized equality or containment, min 2 chars) and, when city is known, its base name (trailing 市 removed) in the access text. */
-export function matchHit(store: { name: string; city: string | null }, hits: HpbHit[]): HpbHit | null {
+const MIN_CONTAINMENT_CHARS = 4;
+
+/**
+ * Whether a hit's name refers to the store. Without a city only exact normalized equality counts
+ * (a bare name is too weak to call a store listed); with a city, containment also counts when the
+ * shorter normalized name has at least 4 chars.
+ */
+export function nameMatches(store: { name: string; city: string | null }, hit: HpbHit): boolean {
   const n = normalizeName(store.name);
-  if (n.length < 2) return null;
+  const h = normalizeName(hit.name);
+  if (n.length < 2 || h.length < 2) return false;
+  if (h === n) return true;
+  if (!store.city) return false;
+  if (Math.min(h.length, n.length) < MIN_CONTAINMENT_CHARS) return false;
+  return h.includes(n) || n.includes(h);
+}
+
+/** A name match whose access text contains the city base name (trailing 市 removed) when the city is known. */
+export function matchHit(store: { name: string; city: string | null }, hits: HpbHit[]): HpbHit | null {
   for (const hit of hits) {
-    const h = normalizeName(hit.name);
-    if (h.length < 2) continue;
-    if (!(h === n || h.includes(n) || n.includes(h))) continue;
+    if (!nameMatches(store, hit)) continue;
     if (store.city && !hit.address.includes(store.city.replace(/市$/, ''))) continue;
     return hit;
   }
   return null;
+}
+
+/** City known, some hits match by name, but none has access text to confirm the area: cannot decide. */
+export function unverifiableByArea(store: { name: string; city: string | null }, hits: HpbHit[]): boolean {
+  if (!store.city) return false;
+  const named = hits.filter((h) => nameMatches(store, h));
+  return named.length > 0 && named.every((h) => h.address.trim() === '');
 }
