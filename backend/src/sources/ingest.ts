@@ -2,12 +2,22 @@ import type { Db } from '../db/client.js';
 import { rawItems } from '../db/schema.js';
 import type { RawItemInput } from '../domain/types.js';
 
+/** Rows per INSERT, keeping 9 bind params per row far below Postgres' 65535 limit. */
+const CHUNK_ROWS = 1000;
+
 /** Insert raw items, ignoring ones already stored for (source, external_id). */
 export async function ingestRawItems(
   db: Db,
   items: RawItemInput[],
 ): Promise<{ inserted: number; skipped: number }> {
-  if (items.length === 0) return { inserted: 0, skipped: 0 };
+  let inserted = 0;
+  for (let i = 0; i < items.length; i += CHUNK_ROWS) {
+    inserted += await insertChunk(db, items.slice(i, i + CHUNK_ROWS));
+  }
+  return { inserted, skipped: items.length - inserted };
+}
+
+async function insertChunk(db: Db, items: RawItemInput[]): Promise<number> {
   const rows = await db
     .insert(rawItems)
     .values(
@@ -25,5 +35,5 @@ export async function ingestRawItems(
     )
     .onConflictDoNothing({ target: [rawItems.source, rawItems.externalId] })
     .returning({ id: rawItems.id });
-  return { inserted: rows.length, skipped: items.length - rows.length };
+  return rows.length;
 }

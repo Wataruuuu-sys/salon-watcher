@@ -54,4 +54,21 @@ describe('ingestRawItems', () => {
     const db = await getTestDb();
     expect(await ingestRawItems(db, [])).toEqual({ inserted: 0, skipped: 0 });
   });
+
+  it('inserts batches beyond the 65535 bind-parameter limit in chunks', async () => {
+    const db = await getTestDb();
+    // 7500 rows x 9 columns = 67500 params: one statement would be rejected by Postgres.
+    const many: RawItemInput[] = Array.from({ length: 7500 }, (_, i) => ({
+      source: 'threads',
+      externalId: `bulk${i}`,
+      url: `https://threads.net/p/bulk${i}`,
+      authorHandle: null,
+      text: 't',
+      postedAt: null,
+      payload: {},
+    }));
+    await ingestRawItems(db, many.slice(0, 1200));
+    expect(await ingestRawItems(db, many)).toEqual({ inserted: 6300, skipped: 1200 });
+    expect(await db.$count(rawItems)).toBe(7500);
+  });
 });
