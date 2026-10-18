@@ -5,10 +5,27 @@ import type { ClassifyInput, LlmClassifier } from './llm';
 
 export type { ClassifyInput, LlmClassifier } from './llm';
 
-/** Rule-based corrections applied after the LLM verdict. */
-export function postProcess(c: Classification): Classification {
+/** Maps LLM city spellings like '東京都立川市' or '立川' to the canonical Tama city name. */
+export function normalizeCity(city: string | null): string | null {
+  if (city === null) return null;
+  const v = city.trim().replace(/^東京都\s*/, '').trim();
+  if (v === '') return null;
+  if (TAMA_CITIES.includes(v)) return v;
+  const withSuffix = `${v}市`;
+  return TAMA_CITIES.includes(withSuffix) ? withSuffix : v;
+}
+
+/** Rule-based corrections applied after the LLM verdict. Only the LLM itself decides 'no'. */
+export function postProcess(raw: Classification): Classification {
+  let c: Classification = { ...raw, city: normalizeCity(raw.city) };
   if (c.city !== null && !TAMA_CITIES.includes(c.city)) {
-    return { ...c, verdict: 'no', reason: `${c.reason}（エリア外）` };
+    // Unrecognised city: keep the lead for a human to check rather than dropping it.
+    c = {
+      ...c,
+      city: null,
+      verdict: c.verdict === 'yes' ? 'maybe' : c.verdict,
+      reason: `${c.reason}（市名を確認: ${c.city}）`,
+    };
   }
   if (c.verdict === 'yes' && c.city === null && c.genre === null) {
     return { ...c, verdict: 'maybe' };

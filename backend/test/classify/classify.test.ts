@@ -17,10 +17,22 @@ function fake(result: Classification): LlmClassifier & { calls: number } {
 const item = { text: '立川にネイルサロンOPEN', authorHandle: null, postedAt: null };
 
 describe('postProcess', () => {
-  it('downgrades yes to no when city is outside Tama', () => {
+  it('nulls a non-Tama city and downgrades yes to maybe (never forces no)', () => {
     const r = postProcess({ ...base, city: '横浜市' });
-    expect(r.verdict).toBe('no');
-    expect(r.reason).toContain('エリア外');
+    expect(r.verdict).toBe('maybe');
+    expect(r.city).toBeNull();
+  });
+  it('keeps the LLM\'s own no for a non-Tama city', () => {
+    expect(postProcess({ ...base, verdict: 'no', city: '横浜市' }).verdict).toBe('no');
+  });
+  it.each([
+    ['立川', '立川市'],
+    ['東京都立川市', '立川市'],
+    ['東京都 町田', '町田市'],
+  ])('normalizes city %s to %s', (input, expected) => {
+    const r = postProcess({ ...base, city: input });
+    expect(r.city).toBe(expected);
+    expect(r.verdict).toBe('yes');
   });
   it('downgrades yes to maybe when city and genre are both null', () => {
     expect(postProcess({ ...base, city: null, genre: null }).verdict).toBe('maybe');
@@ -33,7 +45,7 @@ describe('postProcess', () => {
 describe('classifyItem', () => {
   it('applies post-processing to the LLM result', async () => {
     const llm = fake({ ...base, city: '横浜市' });
-    expect((await classifyItem(item, llm)).verdict).toBe('no');
+    expect(await classifyItem(item, llm)).toMatchObject({ verdict: 'maybe', city: null });
     expect(llm.calls).toBe(1);
   });
   it('downgrades city/genre-less yes to maybe', async () => {

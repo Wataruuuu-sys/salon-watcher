@@ -7,6 +7,8 @@ export interface ClassifyInput {
   text: string;
   authorHandle: string | null;
   postedAt: Date | null;
+  /** Current time, so the LLM can apply the "within ~3 months" rule. */
+  now?: Date;
 }
 
 export interface LlmClassifier {
@@ -27,7 +29,7 @@ ${TAMA_CITIES.join('、')}
 ${GENRES.map((g) => `- ${g.id}: ${g.label}`).join('\n')}
 
 # 「新店」の定義
-オープン予定から開業後おおむね3ヶ月までの店舗。移転オープン・自宅サロンも含む。該当する場合は signals に "relocation"、"home_salon" などを入れる。
+オープン予定から開業後おおむね3ヶ月までの店舗（「今日の日付」を基準に判断する）。移転オープン・自宅サロンも含む。該当する場合は signals に "relocation"、"home_salon" などを入れる。
 
 # 判定基準
 - yes: 開業告知が明確で、対象エリア内と分かり、対象ジャンルである
@@ -37,7 +39,7 @@ ${GENRES.map((g) => `- ${g.id}: ${g.label}`).join('\n')}
 
 city は対象26市のいずれかに該当するときだけその市名を入れ、分からなければ null。openingDate は分かれば YYYY-MM-DD、不明なら null。reason は日本語で簡潔に。`;
 
-const TOOL: Anthropic.Tool = {
+export const CLASSIFY_TOOL: Anthropic.Tool = {
   name: TOOL_NAME,
   description: 'Record the classification of the SNS post.',
   input_schema: {
@@ -46,7 +48,7 @@ const TOOL: Anthropic.Tool = {
       verdict: { type: 'string', enum: VERDICTS },
       storeName: { type: ['string', 'null'] },
       genre: { type: ['string', 'null'], enum: [...GENRE_IDS, null] },
-      city: { type: ['string', 'null'] },
+      city: { type: ['string', 'null'], enum: [...TAMA_CITIES, null] },
       openingDate: { type: ['string', 'null'] },
       reason: { type: 'string' },
       signals: { type: 'array', items: { type: 'string' } },
@@ -87,23 +89,33 @@ export function parseClassification(raw: unknown): Classification {
   };
 }
 
+/** Per-request bound so one hung call cannot eat the process Lambda's time budget. */
+export const ANTHROPIC_CLIENT_OPTIONS = { timeout: 30_000, maxRetries: 2 };
+
+const jstDate = (d: Date): string => d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+
+export function buildUserContent({ text, authorHandle, postedAt, now }: ClassifyInput): string {
+  return [
+    ...(now ? [`今日の日付: ${jstDate(now)}`] : []),
+    `投稿者: ${authorHandle ?? '不明'}`,
+    `投稿日時: ${postedAt ? postedAt.toISOString() : '不明'}`,
+    '--- 投稿本文 ---',
+    text,
+  ].join('\n');
+}
+
 export function anthropicClassifier(apiKey: string, model = 'claude-haiku-5-5'): LlmClassifier {
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey, ...ANTHROPIC_CLIENT_OPTIONS });
   return {
-    async classify({ text, authorHandle, postedAt }) {
-      const userContent = [
-        `投稿者: ${authorHandle ?? '不明'}`,
-        `投稿日時: ${postedAt ? postedAt.toISOString() : '不明'}`,
-        '--- 投稿本文 ---',
-        text,
-      ].join('\n');
+    async classify(input) {
+      const userContent = buildUserContent(input);
       const res = await client.messages.create({
         model,
         max_tokens: 1024,
         // Forced single-tool use is incompatible with thinking, so thinking is off.
         thinking: { type: 'disabled' },
         system: SYSTEM_PROMPT,
-        tools: [TOOL],
+        tools: [CLASSIFY_TOOL],
         tool_choice: { type: 'tool', name: TOOL_NAME },
         messages: [{ role: 'user', content: userContent }],
       });
