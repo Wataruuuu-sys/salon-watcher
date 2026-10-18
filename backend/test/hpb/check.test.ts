@@ -61,6 +61,15 @@ describe('checkHpb', () => {
     expect((await checkHpb(store, http, noSleep)).status).toBe('listed');
   });
 
+  it('city base name is matched against access text', async () => {
+    const page = (access: string) =>
+      lilyPage().replace('立川市曙町 立川駅徒歩3分', access);
+    const yes = vi.fn(async () => html(page('立川駅北口徒歩3分'))) as unknown as typeof fetch;
+    expect((await checkHpb(store, yes, noSleep)).status).toBe('listed');
+    const no = vi.fn(async () => html(page('渋谷駅徒歩1分'))) as unknown as typeof fetch;
+    expect((await checkHpb(store, no, noSleep)).status).toBe('not_listed');
+  });
+
   it('店名不明 -> unknown without fetching', async () => {
     const http = vi.fn() as unknown as typeof fetch;
     expect(await checkHpb({ name: '店名不明', city: null }, http, noSleep)).toEqual({ status: 'unknown', url: null });

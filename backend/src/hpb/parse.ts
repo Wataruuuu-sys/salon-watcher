@@ -46,7 +46,7 @@ function cleanUrl(href: string | undefined): string | null {
   }
 }
 
-/** Name match (normalized equality or containment, min 2 chars) and, when city is known, city in address. */
+/** Name match (normalized equality or containment, min 2 chars) and, when city is known, its base name (trailing 市 removed) in the access text. */
 export function matchHit(store: { name: string; city: string | null }, hits: HpbHit[]): HpbHit | null {
   const n = normalizeName(store.name);
   if (n.length < 2) return null;
@@ -54,7 +54,7 @@ export function matchHit(store: { name: string; city: string | null }, hits: Hpb
     const h = normalizeName(hit.name);
     if (h.length < 2) continue;
     if (!(h === n || h.includes(n) || n.includes(h))) continue;
-    if (store.city && !hit.address.includes(store.city)) continue;
+    if (store.city && !hit.address.includes(store.city.replace(/市$/, ''))) continue;
     return hit;
   }
   return null;

@@ -73,7 +73,7 @@ export async function checkHpb(
 export async function checkPendingStores(
   db: Db,
   http: typeof fetch,
-  limit = 100,
+  limit = 40,
   sleep: Sleep = realSleep,
 ): Promise<number> {
   const pending = await db.select().from(stores).where(eq(stores.hpbStatus, 'unchecked')).limit(limit);
