@@ -1,0 +1,27 @@
+{
+  "name": "@salon-watcher/backend",
+  "private": true,
+  "version": "4.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "migrate": "drizzle-kit migrate",
+    "import-v3": "tsx src/cli/importV3.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "drizzle-kit": "^0.31.11",
+    "tsx": "^4.23.15",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
+    "@aws-sdk/client-sesv2": "^3.1152.0",
+    "@aws-sdk/client-ssm": "^3.1152.0",
+    "cheerio": "^1.2.0",
+    "drizzle-orm": "^0.45.4",
+    "postgres": "^3.4.9"
+  }
+}
