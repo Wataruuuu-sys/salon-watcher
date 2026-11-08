@@ -4,7 +4,8 @@
   "version": "4.0.0",
   "workspaces": ["backend", "frontend", "infra"],
   "scripts": {
-    "test": "npm -w backend test"
+    "test": "npm -w backend test",
+    "check:compose": "node scripts/check-compose.mjs"
   },
   "engines": { "node": ">=22" }
 }

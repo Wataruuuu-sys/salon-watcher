@@ -1,4 +1,4 @@
-import { OPEN_WORDS } from '../config/genres';
+import { OPEN_WORDS } from '../config/genres.js';
 
 const WORDS = OPEN_WORDS.map((w) => w.normalize('NFKC').toLowerCase());
 

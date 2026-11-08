@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { createDb, type Db } from '../../src/db/client.js';
 
-export const testDbUrl = process.env.TEST_DATABASE_URL ?? 'postgres://localhost:5432/salon_test';
+export const testDbUrl = process.env.TEST_DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5433/salon_test';
 
 let dbPromise: Promise<Db> | undefined;
 

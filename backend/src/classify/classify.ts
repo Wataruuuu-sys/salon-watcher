@@ -1,9 +1,9 @@
-import type { Classification } from '../domain/types';
-import { TAMA_CITIES } from '../config/areas';
-import { passesPrefilter } from './prefilter';
-import type { ClassifyInput, LlmClassifier } from './llm';
+import type { Classification } from '../domain/types.js';
+import { TAMA_CITIES } from '../config/areas.js';
+import { passesPrefilter } from './prefilter.js';
+import type { ClassifyInput, LlmClassifier } from './llm.js';
 
-export type { ClassifyInput, LlmClassifier } from './llm';
+export type { ClassifyInput, LlmClassifier } from './llm.js';
 
 /** Maps LLM city spellings like '東京都立川市' or '立川' to the canonical Tama city name. */
 export function normalizeCity(city: string | null): string | null {

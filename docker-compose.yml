@@ -1,8 +1,128 @@
+# Local development stack. Copy .env.example to .env first.
+#   docker compose up -d db api frontend           # UI http://localhost:3000, API http://localhost:8080
+#   docker compose run --rm batch run --sources google_maps
+#   docker compose run --rm tools npm -w backend test
+#   docker compose up -d localstack                # needs LOCALSTACK_AUTH_TOKEN in .env
+# api / frontend never depend on localstack, so they run without a LocalStack token.
+
+x-dev-app: &dev-app
+  build:
+    context: .
+    target: dev
+  env_file:
+    - path: .env
+      required: false
+  volumes:
+    - .:/app
+    # Linux node_modules live in volumes, masking the host's (macOS) ones.
+    - node_modules:/app/node_modules
+    - backend_node_modules:/app/backend/node_modules
+    - frontend_node_modules:/app/frontend/node_modules
+
 services:
-  postgres:
+  db:
     image: postgres:16
-    ports:
-      - "5433:5432"
     environment:
-      POSTGRES_PASSWORD: test
-      POSTGRES_DB: salon_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      # Host 5432 is often taken by a local PostgreSQL; override with DB_PORT.
+      - "127.0.0.1:${DB_PORT:-5433}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./docker/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      # TCP, not the socket: during init scripts the server only listens on the socket.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "salon_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  localstack:
+    image: localstack/localstack:2026.10.4
+    environment:
+      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:-}
+      # ECS tasks started by LocalStack join the compose network, so they can reach `db`.
+      MAIN_DOCKER_NETWORK: salon-watcher
+    ports:
+      - "127.0.0.1:4566:4566"
+    volumes:
+      # LocalStack runs ECS tasks as sibling containers.
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  batch:
+    # Same image as production (Dockerfile `batch` stage); `run` passes the batch CLI arguments.
+    build:
+      context: .
+      target: batch
+    profiles: [batch]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      APP_ENV: local
+      DATABASE_URL: postgres://postgres:postgres@db:5432/salon_dev
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *dev-app
+    # Migrates salon_dev, then serves the API handlers with a fixed dev identity (reloads on source changes).
+    command: sh -c "npm -w backend run migrate && exec npm -w backend exec -- tsx watch src/local/apiServer.ts"
+    environment:
+      APP_ENV: local
+      DATABASE_URL: postgres://postgres:postgres@db:5432/salon_dev
+      PORT: "8080"
+      # Bind-mounted files from macOS do not deliver inotify events; tsx watch polls instead.
+      CHOKIDAR_USEPOLLING: "true"
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    <<: *dev-app
+    command: npm -w frontend run dev -- -H 0.0.0.0 -p 3000
+    environment:
+      NEXT_PUBLIC_AUTH_MODE: none
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+      # Bind-mounted files from macOS do not deliver inotify events.
+      WATCHPACK_POLLING: "true"
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - backend_node_modules:/app/backend/node_modules
+      - frontend_node_modules:/app/frontend/node_modules
+      - frontend_next:/app/frontend/.next
+
+  tools:
+    build:
+      context: .
+      dockerfile: docker/tools/Dockerfile
+    profiles: [tools]
+    working_dir: /app
+    environment:
+      TEST_DATABASE_URL: postgres://postgres:postgres@db:5432/salon_test
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - backend_node_modules:/app/backend/node_modules
+      - frontend_node_modules:/app/frontend/node_modules
+    depends_on:
+      db:
+        condition: service_healthy
+
+networks:
+  default:
+    name: salon-watcher
+
+volumes:
+  db_data:
+  node_modules:
+  backend_node_modules:
+  frontend_node_modules:
+  frontend_next:

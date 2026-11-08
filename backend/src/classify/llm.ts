@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { Classification, Genre, Verdict } from '../domain/types';
-import { TAMA_CITIES } from '../config/areas';
-import { GENRES } from '../config/genres';
+import type { Classification, Genre, Verdict } from '../domain/types.js';
+import { TAMA_CITIES } from '../config/areas.js';
+import { GENRES } from '../config/genres.js';
 
 export interface ClassifyInput {
   text: string;
