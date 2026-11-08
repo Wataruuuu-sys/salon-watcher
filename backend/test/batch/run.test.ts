@@ -136,17 +136,27 @@ describe('runPipeline', () => {
     expect(rows.filter((x) => x.status === 'pending')).toHaveLength(0);
   });
 
-  it('stops repeating when a round makes no progress', async () => {
+  it('stops repeating when a round makes no progress, warns and fails the run while items remain pending', async () => {
     await ingestRawItems(db, [post('p1', '本日オープン')]);
     const source: Source = { id: 'threads', listShards: async () => [], collect: async () => [] };
     let calls = 0;
     const stuck: typeof processPending = async () => {
       calls++;
-      return { resolved: 0, rejected: 0, retried: 500 };
+      return { resolved: 0, rejected: 0, retried: 500, failed: 0 };
     };
-    const r = await runPipeline(ctxWith([source]), ['threads'], { hpbSleep: noSleep, process: stuck });
+    const warnings: Record<string, unknown>[] = [];
+    const ctx = { ...ctxWith([source]), log: { ...quiet, warn: (_m: string, d?: Record<string, unknown>) => void warnings.push(d ?? {}) } };
+    const r = await runPipeline(ctx, ['threads'], { hpbSleep: noSleep, process: stuck });
     expect(calls).toBe(1);
-    expect(r.ok).toBe(true);
+    expect(r.ok).toBe(false);
+    expect(warnings).toContainEqual(expect.objectContaining({ pending: 1 }));
+  });
+
+  it('fails the run when an item is given up after repeated resolve failures', async () => {
+    const source: Source = { id: 'threads', listShards: async () => [], collect: async () => [] };
+    const giveUp: typeof processPending = async () => ({ resolved: 0, rejected: 0, retried: 0, failed: 1 });
+    const r = await runPipeline(ctxWith([source]), ['threads'], { hpbSleep: noSleep, process: giveUp });
+    expect(r.ok).toBe(false);
   });
 
   it('marks the run failed when processing throws, but still checks HPB', async () => {

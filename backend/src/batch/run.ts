@@ -1,3 +1,5 @@
+import { count, eq } from 'drizzle-orm';
+import { rawItems } from '../db/schema.js';
 import type { SourceId } from '../domain/types.js';
 import { runCollect } from '../pipeline/collect.js';
 import { HPB_LIMIT, runHpb } from '../pipeline/hpb.js';
@@ -71,7 +73,15 @@ export async function runPipeline(ctx: BatchContext, sources: SourceId[], opts: 
       const r = await processRound(ctx.db, ctx.llm, PROCESS_BATCH, { log: ctx.log });
       ctx.log.info('processed', r);
       processed += r.resolved + r.rejected;
-      if (r.resolved + r.rejected + r.retried < PROCESS_BATCH || r.resolved + r.rejected === 0) break;
+      if (r.failed > 0) ok = false; // items given up after repeated resolve failures
+      const progress = r.resolved + r.rejected + r.failed;
+      if (r.resolved + r.rejected + r.retried + r.failed < PROCESS_BATCH) break;
+      if (progress === 0) {
+        const [row] = await ctx.db.select({ n: count() }).from(rawItems).where(eq(rawItems.status, 'pending'));
+        ctx.log.warn('process made no progress; leaving items pending', { pending: row?.n ?? 0 });
+        ok = false;
+        break;
+      }
     }
   } catch (err) {
     ctx.log.error('process failed', { error: String(err) });

@@ -100,6 +100,16 @@ describe('batch main', () => {
     expect(closed).toBe(1);
   });
 
+  it('closes a context whose build finishes only after the timeout', async () => {
+    let closed = 0;
+    const { build: inner } = fakeBuild(okSource, { closed: () => closed++ });
+    const slow = () => new Promise<BatchContext>((r) => setTimeout(() => r(inner()), 100));
+    expect(await main(['run', '--sources', 'google_maps'], {}, { build: slow, timeoutMs: 20, log: quietLog })).toBe(1);
+    expect(closed).toBe(0);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(closed).toBe(1);
+  });
+
   it('returns 1 when building the context fails', async () => {
     const build = async (): Promise<BatchContext> => {
       throw new Error('DATABASE_URL missing');

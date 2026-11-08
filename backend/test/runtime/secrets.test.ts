@@ -21,6 +21,9 @@ describe('secretStoreFor', () => {
     await expect(s.get('DATABASE_URL')).rejects.toThrow('secret not found');
     await expect(secretStoreFor({ APP_ENV: 'local' }).get('PLACES_API_KEY')).rejects.toThrow('secret not found');
   });
+  it('never fakes keys outside local mode, even with FAKE_EXTERNAL=1', () => {
+    expect(secretStoreFor({ FAKE_EXTERNAL: '1' }).kind).toBe('ssm');
+  });
   it('put writes to the env object only', async () => {
     const env: Record<string, string | undefined> = {};
     const s = envSecretStore(env);

@@ -63,7 +63,7 @@ describe('processPending', () => {
       },
     ]);
     const { llm, calls } = fakeLlm(() => new Error('should not be called'));
-    expect(await processPending(db, llm)).toEqual({ resolved: 1, rejected: 0, retried: 0 });
+    expect(await processPending(db, llm)).toEqual({ resolved: 1, rejected: 0, retried: 0, failed: 0 });
     expect(calls).toHaveLength(0);
     const [s] = await db.select().from(stores);
     expect(s!.confidence).toBe('map');
@@ -75,7 +75,7 @@ describe('processPending', () => {
   it('rejects a no verdict, keeping the raw item', async () => {
     await ingestRawItems(db, [threadsItem()]);
     const { llm } = fakeLlm(() => cls({ verdict: 'no', reason: 'ng' }));
-    expect(await processPending(db, llm)).toEqual({ resolved: 0, rejected: 1, retried: 0 });
+    expect(await processPending(db, llm)).toEqual({ resolved: 0, rejected: 1, retried: 0, failed: 0 });
     expect(await db.select().from(stores)).toHaveLength(0);
     const [raw] = await db.select().from(rawItems);
     expect(raw!.status).toBe('rejected');
@@ -85,19 +85,19 @@ describe('processPending', () => {
   it('rejects prefilter misses without calling the LLM', async () => {
     await ingestRawItems(db, [threadsItem({ text: '今日はいい天気です' })]);
     const { llm, calls } = fakeLlm(() => cls({}));
-    expect(await processPending(db, llm)).toEqual({ resolved: 0, rejected: 1, retried: 0 });
+    expect(await processPending(db, llm)).toEqual({ resolved: 0, rejected: 1, retried: 0, failed: 0 });
     expect(calls).toHaveLength(0);
   });
 
   it('retries LLM failures and falls back to maybe on the third', async () => {
     await ingestRawItems(db, [threadsItem()]);
     const { llm } = fakeLlm(() => new Error('boom'));
-    expect(await processPending(db, llm)).toEqual({ resolved: 0, rejected: 0, retried: 1 });
-    expect(await processPending(db, llm)).toEqual({ resolved: 0, rejected: 0, retried: 1 });
+    expect(await processPending(db, llm)).toEqual({ resolved: 0, rejected: 0, retried: 1, failed: 0 });
+    expect(await processPending(db, llm)).toEqual({ resolved: 0, rejected: 0, retried: 1, failed: 0 });
     const [mid] = await db.select().from(rawItems);
     expect(mid!.status).toBe('pending');
     expect(mid!.attempts).toBe(2);
-    expect(await processPending(db, llm)).toEqual({ resolved: 1, rejected: 0, retried: 0 });
+    expect(await processPending(db, llm)).toEqual({ resolved: 1, rejected: 0, retried: 0, failed: 0 });
     const [s] = await db.select().from(stores);
     expect(s!.confidence).toBe('maybe');
     expect(s!.snsHandle).toBe('threads:lily_nail');
@@ -123,7 +123,7 @@ describe('processPending', () => {
       threadsItem(),
     ]);
     const { llm } = fakeLlm(() => cls({ storeName: 'ネイルサロン Lily', city: '立川市', reason: 'open' }));
-    expect(await processPending(db, llm)).toEqual({ resolved: 2, rejected: 0, retried: 0 });
+    expect(await processPending(db, llm)).toEqual({ resolved: 2, rejected: 0, retried: 0, failed: 0 });
     expect(await db.select().from(stores)).toHaveLength(1);
     expect(await db.select().from(evidence)).toHaveLength(2);
   });
@@ -140,10 +140,32 @@ describe('processPending', () => {
       if (input.url.endsWith('/a')) throw new Error('db down');
       return resolveStore(d, input);
     };
-    expect(await processPending(db, llm, 500, { log, resolve })).toEqual({ resolved: 1, rejected: 0, retried: 1 });
+    expect(await processPending(db, llm, 500, { log, resolve })).toEqual({ resolved: 1, rejected: 0, retried: 1, failed: 0 });
     expect(errors).toHaveLength(1);
     const rows = await db.select().from(rawItems).orderBy(rawItems.id);
     expect(rows.map((r) => r.status)).toEqual(['pending', 'resolved']);
+  });
+
+  it('gives up on an item after repeated resolve failures, reusing the stored classification', async () => {
+    await ingestRawItems(db, [threadsItem()]);
+    const { llm, calls } = fakeLlm(() => cls({ storeName: 'Lily', reason: 'open' }));
+    const errors: string[] = [];
+    const log = { info() {}, warn() {}, error: (m: string) => void errors.push(m) };
+    const resolve: typeof resolveStore = async () => {
+      throw new Error('db down');
+    };
+    expect(await processPending(db, llm, 500, { log, resolve })).toEqual({ resolved: 0, rejected: 0, retried: 1, failed: 0 });
+    expect(await processPending(db, llm, 500, { log, resolve })).toEqual({ resolved: 0, rejected: 0, retried: 1, failed: 0 });
+    const [mid] = await db.select().from(rawItems);
+    expect(mid!.status).toBe('pending');
+    expect(mid!.attempts).toBe(2);
+    expect(await processPending(db, llm, 500, { log, resolve })).toEqual({ resolved: 0, rejected: 0, retried: 0, failed: 1 });
+    const [raw] = await db.select().from(rawItems);
+    expect(raw!.status).toBe('rejected');
+    expect(raw!.attempts).toBe(3);
+    expect((raw!.classification as Classification).reason).toBe('open');
+    expect(calls).toHaveLength(1); // classified once; retries reuse the stored classification
+    expect(await processPending(db, llm, 500, { log, resolve })).toEqual({ resolved: 0, rejected: 0, retried: 0, failed: 0 });
   });
 
   it('passes the current time to the classifier', async () => {

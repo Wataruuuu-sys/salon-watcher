@@ -73,14 +73,20 @@ export async function main(
   const timedOut = new Promise<'timeout'>((resolve) => {
     timer = setTimeout(() => resolve('timeout'), timeoutMs);
   });
-  const work = (async () => {
-    ctx = await (deps.build ?? buildBatchContext)(env);
-    return execute(ctx, cmd, deps.runOptions);
-  })();
+  let abandoned = false;
+  const build = deps.build ?? buildBatchContext;
+  const built = Promise.resolve().then(() => build(env)).then((c) => {
+    // Timed out while building: nobody will close this context, so close it now.
+    if (abandoned) void c.close().catch(() => {});
+    else ctx = c;
+    return c;
+  });
+  const work = built.then((c) => (abandoned ? false : execute(c, cmd, deps.runOptions)));
 
   try {
     const outcome = await Promise.race([work, timedOut]);
     if (outcome === 'timeout') {
+      abandoned = true;
       (ctx?.log ?? fallbackLog).error('batch timed out', { argv, timeoutMs });
       work.catch(() => {}); // the abandoned work may still fail once the DB closes
       return 1;
