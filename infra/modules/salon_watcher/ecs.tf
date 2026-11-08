@@ -7,10 +7,12 @@ locals {
 
   # Production behaviour: APP_ENV is never set (secrets from SSM, real SES, real external APIs).
   task_env = {
-    SOURCES_DISABLED = var.sources_disabled
-    NOTIFY_FROM      = var.notify_from
-    NOTIFY_TO        = var.notify_to
-    UI_URL           = local.site_url
+    SOURCES_DISABLED  = var.sources_disabled
+    NOTIFY_FROM       = var.notify_from
+    NOTIFY_TO         = var.notify_to
+    UI_URL            = local.site_url
+    CLASSIFY_MODEL_ID = var.classify_model_id
+    BEDROCK_REGION    = local.bedrock_region
   }
 }
 

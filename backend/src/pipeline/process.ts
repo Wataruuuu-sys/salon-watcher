@@ -56,8 +56,10 @@ export async function processPending(
           llm,
         );
         confidence = classification.verdict === 'yes' ? 'yes' : 'maybe';
-      } catch {
+      } catch (err) {
         const attempts = item.attempts + 1;
+        // Logged so a misconfigured classifier (e.g. Bedrock access) shows up instead of silent maybe leads.
+        log.error('classify failed', { rawItemId: item.id, attempts, error: String(err) });
         await db.update(rawItems).set({ attempts }).where(eq(rawItems.id, item.id));
         if (attempts < MAX_ATTEMPTS) {
           out.retried++;

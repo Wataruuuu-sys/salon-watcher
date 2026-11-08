@@ -31,3 +31,15 @@ variable "batch_image_tag" {
   type        = string
   default     = "latest"
 }
+
+variable "classify_model_id" {
+  description = "Claude Haiku 5.5 model or inference profile ID on Bedrock (see docs/deploy.md)."
+  type        = string
+  default     = "anthropic.claude-haiku-5-5"
+}
+
+variable "bedrock_region" {
+  description = "Bedrock endpoint region; null means the provider region (ap-northeast-1)."
+  type        = string
+  default     = null
+}

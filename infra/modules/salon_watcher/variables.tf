@@ -59,3 +59,21 @@ variable "api_zip_path" {
   description = "API Lambda bundle (`npm -w backend run bundle:api` writes backend/dist/api.zip)."
   type        = string
 }
+
+variable "classify_model_id" {
+  description = "Claude model the Threads classifier calls on Claude in Amazon Bedrock: Haiku 5.5, or one of its inference profiles (e.g. \"jp.anthropic.claude-haiku-5-5\")."
+  type        = string
+  default     = "anthropic.claude-haiku-5-5"
+
+  # The task role may only invoke Haiku 5.5 (iam.tf), so other models would fail at run time.
+  validation {
+    condition     = can(regex("^([a-z]+\\.)?anthropic\\.claude-haiku-5-5$", var.classify_model_id))
+    error_message = "classify_model_id must be anthropic.claude-haiku-5-5 or one of its inference profiles."
+  }
+}
+
+variable "bedrock_region" {
+  description = "AWS region of the Bedrock endpoint the classifier calls; null means the provider region."
+  type        = string
+  default     = null
+}

@@ -4,3 +4,6 @@ notify_from           = "notify@salon-watcher.invalid"
 notify_to             = "a@salon-watcher.invalid,b@salon-watcher.invalid"
 cognito_domain_prefix = "salon-watcher-yourname"
 sources_disabled      = "threads"
+# Claude in Amazon Bedrock (defaults shown; see docs/deploy.md).
+# classify_model_id     = "anthropic.claude-haiku-5-5"
+# bedrock_region        = "ap-northeast-1"

@@ -223,10 +223,21 @@ run "task_definition" {
 
   assert {
     condition = alltrue([
-      for n in ["SOURCES_DISABLED", "NOTIFY_FROM", "NOTIFY_TO", "UI_URL"] :
+      for n in ["SOURCES_DISABLED", "NOTIFY_FROM", "NOTIFY_TO", "UI_URL", "CLASSIFY_MODEL_ID", "BEDROCK_REGION"] :
       contains([for e in jsondecode(aws_ecs_task_definition.batch.container_definitions)[0].environment : e.name], n)
     ])
     error_message = "task environment is missing a required variable"
+  }
+
+  assert {
+    condition = {
+      for e in jsondecode(aws_ecs_task_definition.batch.container_definitions)[0].environment : e.name => e.value
+      if contains(["CLASSIFY_MODEL_ID", "BEDROCK_REGION"], e.name)
+      } == {
+      CLASSIFY_MODEL_ID = "anthropic.claude-haiku-5-5"
+      BEDROCK_REGION    = "ap-northeast-1"
+    }
+    error_message = "the classifier must default to Claude Haiku 5.5 in the provider region"
   }
 
   assert {
@@ -295,6 +306,40 @@ run "iam_scope" {
     error_message = "task role must be able to send mail"
   }
 
+  # Nothing beyond SSM, SES and Bedrock inference.
+  assert {
+    condition = toset(flatten([for s in jsondecode(aws_iam_role_policy.task.policy).Statement : s.Action])) == toset([
+      "ssm:GetParameter", "ssm:GetParameters", "kms:Decrypt", "ssm:PutParameter",
+      "ses:SendEmail", "ses:SendRawEmail", "bedrock-mantle:CreateInference",
+    ])
+    error_message = "task role has an unexpected action"
+  }
+
+  # Claude in Amazon Bedrock authorizes inference on the account's projects, filtered by model.
+  assert {
+    condition = [
+      for s in jsondecode(aws_iam_role_policy.task.policy).Statement : {
+        resource = s.Resource
+        models   = s.Condition.StringLike["bedrock-mantle:Model"]
+      }
+      if contains(s.Action, "bedrock-mantle:CreateInference")
+      ] == [{
+        resource = "arn:aws:bedrock-mantle:ap-northeast-1:123456789012:project/*"
+        models   = ["anthropic.claude-haiku-5-5", "*.anthropic.claude-haiku-5-5"]
+    }]
+    error_message = "Bedrock inference must be limited to Claude Haiku 5.5 in the Bedrock region"
+  }
+
+  # The API Lambda never classifies.
+  assert {
+    condition = !anytrue(flatten([
+      for s in jsondecode(aws_iam_role_policy.api.policy).Statement : [
+        for a in flatten([s.Action]) : startswith(a, "bedrock")
+      ]
+    ]))
+    error_message = "the API Lambda must not call Bedrock"
+  }
+
   # Execution role: ECR pull and log writes only.
   assert {
     condition = alltrue(flatten([
@@ -356,6 +401,50 @@ run "alarms" {
     condition     = aws_sns_topic_subscription.owner.endpoint == "owner@salon-watcher.invalid" && aws_sns_topic_subscription.owner.protocol == "email"
     error_message = "alarm topic must email the owner"
   }
+}
+
+run "bedrock_overrides" {
+  command = plan
+  module {
+    source = "./modules/salon_watcher"
+  }
+
+  variables {
+    classify_model_id = "jp.anthropic.claude-haiku-5-5"
+    bedrock_region    = "ap-northeast-3"
+  }
+
+  assert {
+    condition = {
+      for e in jsondecode(aws_ecs_task_definition.batch.container_definitions)[0].environment : e.name => e.value
+      if contains(["CLASSIFY_MODEL_ID", "BEDROCK_REGION"], e.name)
+      } == {
+      CLASSIFY_MODEL_ID = "jp.anthropic.claude-haiku-5-5"
+      BEDROCK_REGION    = "ap-northeast-3"
+    }
+    error_message = "classify_model_id / bedrock_region must reach the task environment"
+  }
+
+  assert {
+    condition = contains([
+      for s in jsondecode(aws_iam_role_policy.task.policy).Statement : s.Resource
+      if contains(s.Action, "bedrock-mantle:CreateInference")
+    ], "arn:aws:bedrock-mantle:ap-northeast-3:123456789012:project/*")
+    error_message = "Bedrock permission must follow bedrock_region"
+  }
+}
+
+run "non_haiku_model_rejected" {
+  command = plan
+  module {
+    source = "./modules/salon_watcher"
+  }
+
+  variables {
+    classify_model_id = "anthropic.claude-opus-5-5"
+  }
+
+  expect_failures = [var.classify_model_id]
 }
 
 run "placeholder_email_rejected" {

@@ -1,12 +1,11 @@
-import type { LlmClassifier } from '../classify/classify.js';
 import { createDb } from '../db/client.js';
 import { createLogger } from '../lib/log.js';
-import { externalDepsFor } from '../runtime/external.js';
 import type { Env } from '../runtime/mode.js';
 import { secretStoreFor } from '../runtime/secrets.js';
 import type { SourceContext } from '../sources/types.js';
 
-export type HandlerContext = SourceContext & { llm: LlmClassifier };
+/** The API Lambda never classifies, so it builds no LLM client (the batch adds one, see batch/context.ts). */
+export type HandlerContext = SourceContext;
 
 let cached: Promise<Omit<HandlerContext, 'now'>> | undefined;
 
@@ -14,13 +13,12 @@ let cached: Promise<Omit<HandlerContext, 'now'>> | undefined;
 export function buildContext(env: Env = process.env): Promise<HandlerContext> {
   cached ??= (async () => {
     const secrets = secretStoreFor(env);
-    const [databaseUrl, apiKey] = await Promise.all([secrets.get('DATABASE_URL'), secrets.get('ANTHROPIC_API_KEY')]);
+    const databaseUrl = await secrets.get('DATABASE_URL');
     return {
       db: createDb(databaseUrl),
       http: fetch,
       secrets,
       log: createLogger(),
-      llm: externalDepsFor(env).llm(apiKey),
     };
   })();
   cached.catch(() => {

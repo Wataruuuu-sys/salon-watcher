@@ -89,6 +89,15 @@ describe('processPending', () => {
     expect(calls).toHaveLength(0);
   });
 
+  it('logs each LLM failure with the error', async () => {
+    await ingestRawItems(db, [threadsItem()]);
+    const { llm } = fakeLlm(() => new Error('AccessDeniedException'));
+    const errors: Array<[string, Record<string, unknown> | undefined]> = [];
+    const log = { info() {}, warn() {}, error: (m: string, f?: Record<string, unknown>) => void errors.push([m, f]) };
+    await processPending(db, llm, 500, { log });
+    expect(errors).toEqual([['classify failed', expect.objectContaining({ attempts: 1, error: 'Error: AccessDeniedException' })]]);
+  });
+
   it('retries LLM failures and falls back to maybe on the third', async () => {
     await ingestRawItems(db, [threadsItem()]);
     const { llm } = fakeLlm(() => new Error('boom'));
