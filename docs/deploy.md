@@ -55,7 +55,7 @@ aws ssm put-parameter --name /salon-watcher/THREADS_ACCESS_TOKEN --type SecureSt
 
 Threads 投稿の判定は Claude Haiku 5.5 を Amazon Bedrock（Claude in Amazon Bedrock）経由で呼びます。課金は AWS に一本化され、API キーは不要です（バッチのタスクロールの権限で呼びます。IAM は Terraform が `bedrock-mantle:CreateInference` を Haiku 5.5 に限って付与します）。
 
-1. AWS コンソールの [Bedrock > Model access](https://console.aws.amazon.com/bedrock/home#/modelaccess) を **`ap-northeast-1`（東京）** で開き、**Claude Haiku 5.5** のアクセスを申請・有効化します（Haiku 5.5 は全員に開放されたモデルではなく、利用条件はこの画面で確認します。案内に従ってください）。
+1. AWS コンソールの [Bedrock > Model access](https://console.aws.amazon.com/bedrock/home#/modelaccess) を **`ap-northeast-1`（東京）** で開き、**Claude Haiku 5.5** のアクセスを申請・有効化します（Haiku 5.5 は全員に開放されたモデルではなく、利用条件はこの画面で確認します。案内に従ってください）。モデルアクセス（およびそれに伴う AWS Marketplace のサブスクリプション）は、**最初の実行より前に、管理者がコンソールで有効化しておく**必要があります。バッチのタスクロールには Marketplace の権限が無いため、実行時に自動で有効化されることはありません。
 2. 使うモデル ID を決めて `terraform.tfvars` の `classify_model_id` に設定します（既定のままなら設定不要）:
    - 既定 `anthropic.claude-haiku-5-5`（東京リージョンのエンドポイントで呼ぶ）。
    - 日本国内のリージョンにルーティングを限定したい場合や、既定 ID で呼べない場合は、推論プロファイルの ID（例 `jp.anthropic.claude-haiku-5-5`）を指定します。正確な ID はコンソールの「Cross-region inference」（推論プロファイル）一覧で確認してください。

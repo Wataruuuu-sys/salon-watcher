@@ -1,3 +1,4 @@
+import type { LlmClassifier } from '../classify/classify.js';
 import { createDb, closeDb } from '../db/client.js';
 import type { SourceId } from '../domain/types.js';
 import type { HandlerContext } from '../handlers/context.js';
@@ -11,6 +12,7 @@ import { buildRegistry } from '../sources/registry.js';
 import type { Source } from '../sources/types.js';
 
 export interface BatchContext extends HandlerContext {
+  llm: LlmClassifier;
   getSource(id: SourceId): Source;
   hpbHttp: typeof fetch;
   mail: SendMail;

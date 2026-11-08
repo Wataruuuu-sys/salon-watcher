@@ -61,7 +61,12 @@ docker compose run --rm batch notify
 
 ### 本物の API への切り替え
 
-`.env` に `PLACES_API_KEY` / `THREADS_ACCESS_TOKEN` を書き、`FAKE_EXTERNAL=` を空（または `0`）にします。Claude（判定）は Amazon Bedrock 経由なので API キーは不要で、Bedrock を呼べる AWS 認証情報が要ります: `.env` に `AWS_REGION` とアクセスキー（`AWS_ACCESS_KEY_ID` など）を書くか、`AWS_PROFILE` を書いて `docker-compose.yml` の `batch` にある `~/.aws` の読み取り専用マウントのコメントを外します（`.env.example` 参照。モデルは `CLASSIFY_MODEL_ID`、既定 `anthropic.claude-haiku-5-5`）。バッチを再実行すれば反映されます（`api` は `docker compose up -d --force-recreate api`）。実 API は課金・レート制限があるので、まず `--sources google_maps` 単体で小さく試してください。
+`.env` に `PLACES_API_KEY` / `THREADS_ACCESS_TOKEN` を書き、`FAKE_EXTERNAL=` を空（または `0`）にします。Claude（判定）は Amazon Bedrock 経由なので API キーは不要ですが、本物モードのバッチは（`--sources google_maps` だけの実行や `notify` でも）**どの認証方法でも必ず次の 2 つ**が要ります（無いとバッチの起動時にエラーになります）:
+
+- リージョン: `.env` に `AWS_REGION`（または `BEDROCK_REGION`）
+- Bedrock を呼べる AWS 認証情報: アクセスキー（`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`、一時認証なら `AWS_SESSION_TOKEN`）か、`AWS_PROFILE`（このときは `docker-compose.yml` の `batch` にある `~/.aws` の読み取り専用マウントのコメントも外す）
+
+詳しくは `.env.example` を参照してください。モデルは `CLASSIFY_MODEL_ID`（既定 `anthropic.claude-haiku-5-5`）で変えられます。`api` サービスは判定をしないので、これらは不要です。バッチを再実行すれば反映されます（`api` は `docker compose up -d --force-recreate api`）。実 API は課金・レート制限があるので、まず `--sources google_maps` 単体で小さく試してください。
 
 ## 5. テスト
 
