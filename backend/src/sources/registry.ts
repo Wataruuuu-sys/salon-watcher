@@ -18,6 +18,18 @@ export function enabledSources(env: Record<string, string | undefined>): SourceI
 
 export const ENABLED_SOURCES: SourceId[] = enabledSources(process.env);
 
+/** Lookup over the given sources (real or fake). */
+export function buildRegistry(list: Source[]): { getSource(id: SourceId): Source } {
+  const byId = new Map<SourceId, Source>(list.map((s) => [s.id, s]));
+  return {
+    getSource(id) {
+      const source = byId.get(id);
+      if (!source) throw new Error(`unknown source: ${id}`);
+      return source;
+    },
+  };
+}
+
 const sources = new Map<SourceId, Source>();
 
 export function registerSource(source: Source): void {
@@ -25,9 +37,7 @@ export function registerSource(source: Source): void {
 }
 
 export function getSource(id: SourceId): Source {
-  const source = sources.get(id);
-  if (!source) throw new Error(`unknown source: ${id}`);
-  return source;
+  return buildRegistry([...sources.values()]).getSource(id);
 }
 
 registerSource(googleMapsSource);

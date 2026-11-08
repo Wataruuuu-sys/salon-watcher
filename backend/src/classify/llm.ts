@@ -12,6 +12,8 @@ export interface ClassifyInput {
 }
 
 export interface LlmClassifier {
+  /** Distinguishes the real classifier from the local-development fake. */
+  kind?: 'anthropic' | 'fake';
   classify(input: ClassifyInput): Promise<Classification>;
 }
 
@@ -107,6 +109,7 @@ export function buildUserContent({ text, authorHandle, postedAt, now }: Classify
 export function anthropicClassifier(apiKey: string, model = 'claude-haiku-5-5'): LlmClassifier {
   const client = new Anthropic({ apiKey, ...ANTHROPIC_CLIENT_OPTIONS });
   return {
+    kind: 'anthropic',
     async classify(input) {
       const userContent = buildUserContent(input);
       const res = await client.messages.create({
