@@ -18,3 +18,4 @@ frontend/next-env.d.ts
 
 # Local scratch files (not committed)
 tmp/
+.neon

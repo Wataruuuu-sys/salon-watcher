@@ -26,13 +26,22 @@
 
 ## 1. データベース（Neon）
 
-1. Neon でプロジェクトを作成（リージョンは AWS Tokyo に近いもの）。
-2. ダッシュボードの「Connection string」で **Pooled connection** を選び、接続文字列をコピー（`postgresql://...-pooler...?sslmode=require`）。
-3. マイグレーションを本番に適用:
-   ```sh
-   DATABASE_URL='<接続文字列>' npm -w backend run migrate
-   ```
-   `migrations applied successfully` が出れば完了。
+**状態（2026-11-08）: 済み。** Neon プロジェクトはリポジトリ直下の `neon.ts`（Neon 側の設定。コミット済み）と `.neon`（組織・プロジェクト ID。コミットしない）で紐付け済み、`production` ブランチにマイグレーション適用済み（PostgreSQL 18、`pg_trgm` 1.6）。
+
+- リージョンは `us-east-1`。Neon に東京リージョンが無く、個人ツールの規模では遅延（東京から1往復 150ms 前後）を許容する判断（オーナー判断）。開発用 DB も同じ PostgreSQL 18 に揃えている
+- 接続文字列の取得（パスワードを含むため `.env.neon` に書き出す。`.env.*` はコミット対象外）:
+  ```sh
+  npx neon@9.2.0 login            # 初回のみ。ブラウザでサインイン
+  npx neon@9.2.0 env pull --file .env.neon -e DATABASE_URL -e DATABASE_URL_UNPOOLED
+  ```
+  `DATABASE_URL` は pooled（`-pooler` 付き）、`DATABASE_URL_UNPOOLED` は直接接続
+- マイグレーションは **直接接続** で流す（スキーマ変更をコネクションプール経由にしない）:
+  ```sh
+  set -a && . ./.env.neon && set +a
+  DATABASE_URL="$DATABASE_URL_UNPOOLED" npm -w backend run migrate
+  ```
+  `migrations applied successfully` が出れば完了。スキーマを変えたときも同じ手順
+- アプリ（バッチ・API）は pooled の `DATABASE_URL` を使う（次節で SSM に登録）
 
 ## 2. SSM パラメータ（3つとも SecureString）
 

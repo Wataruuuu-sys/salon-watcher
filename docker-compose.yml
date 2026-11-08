@@ -19,7 +19,8 @@ x-dev-app: &dev-app
 
 services:
   db:
-    image: postgres:16
+    # Same major version as production (Neon).
+    image: postgres:18
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -27,7 +28,8 @@ services:
       # Host 5432 is often taken by a local PostgreSQL; override with DB_PORT.
       - "127.0.0.1:${DB_PORT:-5433}:5432"
     volumes:
-      - db_data:/var/lib/postgresql/data
+      # postgres:18 keeps PGDATA in a versioned subdirectory, so mount the parent.
+      - db_data_pg18:/var/lib/postgresql
       - ./docker/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       # TCP, not the socket: during init scripts the server only listens on the socket.
@@ -111,7 +113,7 @@ networks:
     name: salon-watcher
 
 volumes:
-  db_data:
+  db_data_pg18:
   node_modules:
   backend_node_modules:
   frontend_node_modules:
