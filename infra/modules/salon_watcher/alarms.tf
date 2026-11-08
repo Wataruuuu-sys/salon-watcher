@@ -59,11 +59,10 @@ resource "aws_cloudwatch_event_target" "task_failed" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "api_errors" {
-  count               = var.create_api ? 1 : 0
   alarm_name          = "salon-watcher-api-errors"
   namespace           = "AWS/Lambda"
   metric_name         = "Errors"
-  dimensions          = { FunctionName = aws_lambda_function.api[0].function_name }
+  dimensions          = { FunctionName = aws_lambda_function.api.function_name }
   statistic           = "Sum"
   period              = 3600
   evaluation_periods  = 1
@@ -75,7 +74,6 @@ resource "aws_cloudwatch_metric_alarm" "api_errors" {
 
 # A schedule whose RunTask call fails (permissions, bad task definition) never produces a task event.
 resource "aws_cloudwatch_metric_alarm" "scheduler_target_errors" {
-  count               = var.create_scheduler ? 1 : 0
   alarm_name          = "salon-watcher-scheduler-target-errors"
   namespace           = "AWS/Scheduler"
   metric_name         = "TargetErrorCount"

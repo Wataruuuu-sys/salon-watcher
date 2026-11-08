@@ -2,8 +2,6 @@
 #   docker compose up -d db api frontend           # UI http://localhost:3000, API http://localhost:8080
 #   docker compose run --rm batch run --sources google_maps
 #   docker compose run --rm tools npm -w backend test
-#   docker compose up -d localstack                # needs LOCALSTACK_AUTH_TOKEN in .env
-# api / frontend never depend on localstack, so they run without a LocalStack token.
 
 x-dev-app: &dev-app
   build:
@@ -37,18 +35,6 @@ services:
       interval: 2s
       timeout: 5s
       retries: 30
-
-  localstack:
-    image: localstack/localstack:2026.10.4
-    environment:
-      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:-}
-      # ECS tasks started by LocalStack join the compose network, so they can reach `db`.
-      MAIN_DOCKER_NETWORK: salon-watcher
-    ports:
-      - "127.0.0.1:4566:4566"
-    volumes:
-      # LocalStack runs ECS tasks as sibling containers.
-      - /var/run/docker.sock:/var/run/docker.sock
 
   batch:
     # Same image as production (Dockerfile `batch` stage); `run` passes the batch CLI arguments.

@@ -242,24 +242,24 @@ run "cognito_admin_only" {
   }
 
   assert {
-    condition     = aws_cognito_user_pool.main[0].admin_create_user_config[0].allow_admin_create_user_only == true
+    condition     = aws_cognito_user_pool.main.admin_create_user_config[0].allow_admin_create_user_only == true
     error_message = "self sign-up must be disabled"
   }
 
   assert {
     condition = (
-      aws_cognito_user_pool_client.web[0].callback_urls == toset(["https://${aws_cloudfront_distribution.site[0].domain_name}/callback", "https://${aws_cloudfront_distribution.site[0].domain_name}/callback/"])
+      aws_cognito_user_pool_client.web.callback_urls == toset(["https://${aws_cloudfront_distribution.site.domain_name}/callback", "https://${aws_cloudfront_distribution.site.domain_name}/callback/"])
     )
     error_message = "callback URLs must be the site URL /callback and /callback/"
   }
 
   assert {
-    condition     = aws_apigatewayv2_api.http[0].cors_configuration[0].allow_origins == toset(["https://${aws_cloudfront_distribution.site[0].domain_name}"])
+    condition     = aws_apigatewayv2_api.http.cors_configuration[0].allow_origins == toset(["https://${aws_cloudfront_distribution.site.domain_name}"])
     error_message = "CORS must allow only the site URL"
   }
 
   assert {
-    condition     = alltrue([for r in aws_apigatewayv2_route.api : r.authorization_type == "JWT"])
+    condition     = length(aws_apigatewayv2_route.api) == 4 && alltrue([for r in aws_apigatewayv2_route.api : r.authorization_type == "JWT"])
     error_message = "every API route must require the JWT authorizer"
   }
 }
@@ -308,7 +308,7 @@ run "iam_scope" {
   # The API Lambda reads SSM under /salon-watcher/* and never writes it.
   assert {
     condition = alltrue([
-      for s in jsondecode(aws_iam_role_policy.api[0].policy).Statement :
+      for s in jsondecode(aws_iam_role_policy.api.policy).Statement :
       !contains(s.Action, "ssm:PutParameter") && (!contains(s.Action, "ssm:GetParameter") || endswith(s.Resource, ":parameter/salon-watcher/*"))
     ])
     error_message = "API Lambda SSM access must be read-only under /salon-watcher/*"
@@ -343,11 +343,11 @@ run "alarms" {
 
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.api_errors[0].metric_name == "Errors" &&
-      aws_cloudwatch_metric_alarm.api_errors[0].period == 3600 &&
-      aws_cloudwatch_metric_alarm.api_errors[0].threshold == 1 &&
-      aws_cloudwatch_metric_alarm.api_errors[0].comparison_operator == "GreaterThanOrEqualToThreshold" &&
-      aws_cloudwatch_metric_alarm.api_errors[0].alarm_actions == toset([aws_sns_topic.alarm.arn])
+      aws_cloudwatch_metric_alarm.api_errors.metric_name == "Errors" &&
+      aws_cloudwatch_metric_alarm.api_errors.period == 3600 &&
+      aws_cloudwatch_metric_alarm.api_errors.threshold == 1 &&
+      aws_cloudwatch_metric_alarm.api_errors.comparison_operator == "GreaterThanOrEqualToThreshold" &&
+      aws_cloudwatch_metric_alarm.api_errors.alarm_actions == toset([aws_sns_topic.alarm.arn])
     )
     error_message = "API Lambda errors >= 1 per hour must notify the alarm topic"
   }
@@ -382,52 +382,4 @@ run "placeholder_notify_rejected" {
   }
 
   expect_failures = [var.notify_to]
-}
-
-run "local_toggles_skip_resources" {
-  command = plan
-  module {
-    source = "./modules/salon_watcher"
-  }
-
-  variables {
-    create_cognito   = false
-    create_api       = false
-    create_site      = false
-    create_scheduler = false
-  }
-
-  assert {
-    condition = (
-      length(aws_cognito_user_pool.main) == 0 &&
-      length(aws_lambda_function.api) == 0 &&
-      length(aws_cloudfront_distribution.site) == 0 &&
-      length(aws_scheduler_schedule.batch) == 0
-    )
-    error_message = "toggles must skip their resources"
-  }
-
-  assert {
-    condition     = output.site_url == null && output.api_url == null && output.cognito_client_id == null && output.user_pool_id == null && output.cognito_authority == null
-    error_message = "outputs of skipped resources must be null"
-  }
-
-  assert {
-    condition     = output.cluster_name != null && output.task_definition_arn != null
-    error_message = "the batch is always created"
-  }
-}
-
-run "api_requires_cognito" {
-  command = plan
-  module {
-    source = "./modules/salon_watcher"
-  }
-
-  variables {
-    create_cognito = false
-  }
-
-  # Without Cognito the routes would have no authorizer; refuse instead of exposing the API.
-  expect_failures = [aws_apigatewayv2_api.http]
 }

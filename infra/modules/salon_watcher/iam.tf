@@ -86,8 +86,7 @@ resource "aws_iam_role_policy" "execution" {
 
 # ---- Scheduler role (start the batch task) ----
 resource "aws_iam_role" "scheduler" {
-  count = var.create_scheduler ? 1 : 0
-  name  = "salon-watcher-scheduler"
+  name = "salon-watcher-scheduler"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -100,9 +99,8 @@ resource "aws_iam_role" "scheduler" {
 }
 
 resource "aws_iam_role_policy" "scheduler" {
-  count = var.create_scheduler ? 1 : 0
-  name  = "run-batch"
-  role  = aws_iam_role.scheduler[0].id
+  name = "run-batch"
+  role = aws_iam_role.scheduler.id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [

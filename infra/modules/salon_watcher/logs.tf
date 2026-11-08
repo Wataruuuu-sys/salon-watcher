@@ -9,7 +9,6 @@ resource "aws_cloudwatch_log_group" "batch" {
 }
 
 resource "aws_cloudwatch_log_group" "api" {
-  count             = var.create_api ? 1 : 0
   name              = "/aws/lambda/${local.api_function_name}"
   retention_in_days = local.log_retention_days
 }

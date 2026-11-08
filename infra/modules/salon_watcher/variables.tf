@@ -59,24 +59,3 @@ variable "api_zip_path" {
   description = "API Lambda bundle (`npm -w backend run bundle:api` writes backend/dist/api.zip)."
   type        = string
 }
-
-# Toggles for environments that cannot host every service (LocalStack, Task 8).
-variable "create_cognito" {
-  type    = bool
-  default = true
-}
-
-variable "create_api" {
-  type    = bool
-  default = true
-}
-
-variable "create_site" {
-  type    = bool
-  default = true
-}
-
-variable "create_scheduler" {
-  type    = bool
-  default = true
-}

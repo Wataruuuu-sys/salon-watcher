@@ -9,7 +9,7 @@ locals {
 }
 
 resource "aws_scheduler_schedule" "batch" {
-  for_each = var.create_scheduler ? local.batch_schedules : {}
+  for_each = local.batch_schedules
 
   name                         = "salon-watcher-${replace(each.key, "_", "-")}"
   schedule_expression          = each.value.expression
@@ -21,7 +21,7 @@ resource "aws_scheduler_schedule" "batch" {
 
   target {
     arn      = aws_ecs_cluster.main.arn
-    role_arn = aws_iam_role.scheduler[0].arn
+    role_arn = aws_iam_role.scheduler.arn
     input = jsonencode({
       containerOverrides = [{ name = local.batch_container, command = each.value.command }]
     })

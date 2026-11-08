@@ -1,17 +1,15 @@
 # ---- Web hosting (S3 + CloudFront OAC). Files are synced by infra/scripts/deploy-frontend.sh ----
 locals {
-  site_url = var.create_site ? "https://${aws_cloudfront_distribution.site[0].domain_name}" : null
+  site_url = "https://${aws_cloudfront_distribution.site.domain_name}"
 }
 
 resource "aws_s3_bucket" "site" {
-  count         = var.create_site ? 1 : 0
   bucket_prefix = "salon-watcher-site-"
   force_destroy = true # the site is rebuilt from the repo
 }
 
 resource "aws_s3_bucket_public_access_block" "site" {
-  count                   = var.create_site ? 1 : 0
-  bucket                  = aws_s3_bucket.site[0].id
+  bucket                  = aws_s3_bucket.site.id
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
@@ -19,16 +17,14 @@ resource "aws_s3_bucket_public_access_block" "site" {
 }
 
 resource "aws_s3_bucket_ownership_controls" "site" {
-  count  = var.create_site ? 1 : 0
-  bucket = aws_s3_bucket.site[0].id
+  bucket = aws_s3_bucket.site.id
   rule {
     object_ownership = "BucketOwnerEnforced"
   }
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "site" {
-  count  = var.create_site ? 1 : 0
-  bucket = aws_s3_bucket.site[0].id
+  bucket = aws_s3_bucket.site.id
   rule {
     apply_server_side_encryption_by_default {
       sse_algorithm = "AES256"
@@ -37,8 +33,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "site" {
 }
 
 resource "aws_s3_bucket_policy" "site" {
-  count  = var.create_site ? 1 : 0
-  bucket = aws_s3_bucket.site[0].id
+  bucket = aws_s3_bucket.site.id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -47,7 +42,7 @@ resource "aws_s3_bucket_policy" "site" {
         Effect    = "Deny"
         Principal = "*"
         Action    = "s3:*"
-        Resource  = [aws_s3_bucket.site[0].arn, "${aws_s3_bucket.site[0].arn}/*"]
+        Resource  = [aws_s3_bucket.site.arn, "${aws_s3_bucket.site.arn}/*"]
         Condition = { Bool = { "aws:SecureTransport" = "false" } }
       },
       {
@@ -55,8 +50,8 @@ resource "aws_s3_bucket_policy" "site" {
         Effect    = "Allow"
         Principal = { Service = "cloudfront.amazonaws.com" }
         Action    = "s3:GetObject"
-        Resource  = "${aws_s3_bucket.site[0].arn}/*"
-        Condition = { StringEquals = { "AWS:SourceArn" = aws_cloudfront_distribution.site[0].arn } }
+        Resource  = "${aws_s3_bucket.site.arn}/*"
+        Condition = { StringEquals = { "AWS:SourceArn" = aws_cloudfront_distribution.site.arn } }
       },
     ]
   })
@@ -64,7 +59,6 @@ resource "aws_s3_bucket_policy" "site" {
 }
 
 resource "aws_cloudfront_origin_access_control" "site" {
-  count                             = var.create_site ? 1 : 0
   name                              = "salon-watcher-site"
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
@@ -73,7 +67,6 @@ resource "aws_cloudfront_origin_access_control" "site" {
 
 # Next.js static export uses trailingSlash: map /foo and /foo/ to /foo/index.html.
 resource "aws_cloudfront_function" "index_rewrite" {
-  count   = var.create_site ? 1 : 0
   name    = "salon-watcher-index-rewrite"
   runtime = "cloudfront-js-2.0"
   publish = true
@@ -81,7 +74,6 @@ resource "aws_cloudfront_function" "index_rewrite" {
 }
 
 resource "aws_cloudfront_distribution" "site" {
-  count               = var.create_site ? 1 : 0
   enabled             = true
   default_root_object = "index.html"
   http_version        = "http2"
@@ -89,8 +81,8 @@ resource "aws_cloudfront_distribution" "site" {
 
   origin {
     origin_id                = "site"
-    domain_name              = aws_s3_bucket.site[0].bucket_regional_domain_name
-    origin_access_control_id = aws_cloudfront_origin_access_control.site[0].id
+    domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
+    origin_access_control_id = aws_cloudfront_origin_access_control.site.id
   }
 
   default_cache_behavior {
@@ -103,7 +95,7 @@ resource "aws_cloudfront_distribution" "site" {
 
     function_association {
       event_type   = "viewer-request"
-      function_arn = aws_cloudfront_function.index_rewrite[0].arn
+      function_arn = aws_cloudfront_function.index_rewrite.arn
     }
   }
 

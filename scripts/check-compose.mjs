@@ -1,5 +1,5 @@
 // Static checks on the resolved docker-compose config (`npm run check:compose`).
-// Guards the dev stack's invariants, notably that db/api/frontend start without a LocalStack token.
+// Guards the dev stack's invariants, notably that no LocalStack service exists and ports stay on loopback.
 import { execFileSync } from 'node:child_process';
 
 /** Resolved compose config as JSON; tries the `docker compose` plugin first, then standalone `docker-compose`. */
@@ -37,22 +37,21 @@ const config = composeConfig();
 const services = config.services ?? {};
 const dependsOn = (name) => Object.keys(services[name]?.depends_on ?? {});
 
-for (const name of ['db', 'localstack', 'batch', 'api', 'frontend', 'tools']) {
+for (const name of ['db', 'batch', 'api', 'frontend', 'tools']) {
   check(name in services, `service '${name}' is missing`);
 }
+// AWS is verified on the real account (spec 3.12); no emulator belongs in the stack.
+check(!('localstack' in services), "service 'localstack' must not exist");
 
-// Review Focus 5: without a LocalStack token, `up db api frontend` must not pull in localstack.
-for (const name of ['db', 'api', 'frontend']) {
-  check(!dependsOn(name).includes('localstack'), `${name} must not depend on localstack`);
-}
 check(services.api?.depends_on?.db?.condition === 'service_healthy', 'api must wait for a healthy db');
 check(Boolean(services.db?.healthcheck), 'db needs a healthcheck');
 
-const localstackImage = services.localstack?.image ?? '';
-check(
-  /^localstack\/localstack:\d{4}\.\d+(\.\d+)?$/.test(localstackImage),
-  `localstack image must be pinned to a dated release tag (got '${localstackImage}')`,
-);
+// Dev ports must not be reachable from the LAN.
+for (const [name, svc] of Object.entries(services)) {
+  for (const port of svc.ports ?? []) {
+    check(port.host_ip === '127.0.0.1', `${name}: published port ${port.published} must bind 127.0.0.1 (got '${port.host_ip ?? 'all interfaces'}')`);
+  }
+}
 
 check(services.batch?.environment?.APP_ENV === 'local', 'batch must set APP_ENV=local');
 check(services.batch?.build?.target === 'batch', 'batch must build the Dockerfile batch stage');

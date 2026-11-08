@@ -1,13 +1,12 @@
-# Dev tooling: Node 22 (tests), Terraform + tflocal (LocalStack), AWS CLI v2.
+# Dev tooling: Node 22 (tests), Terraform, AWS CLI v2.
 # Build context is the repo root (docker-compose `tools`); the repo itself is bind-mounted at /app.
 FROM node:22-bookworm-slim
 
 ARG TERRAFORM_VERSION=1.16.7
-ARG TFLOCAL_VERSION=0.27.0
 ARG AWSCLI_VERSION=2.39.2
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl unzip git python3 python3-venv \
+ && apt-get install -y --no-install-recommends ca-certificates curl unzip git jq \
  && rm -rf /var/lib/apt/lists/*
 
 # Terraform, checked against HashiCorp's published SHA256SUMS.
@@ -27,11 +26,6 @@ RUN case "$(dpkg --print-architecture)" in amd64) a=x86_64 ;; arm64) a=aarch64 ;
  && unzip -q awscli.zip \
  && ./aws/install \
  && rm -rf aws awscli.zip
-
-# tflocal (pip terraform-local) in its own venv.
-RUN python3 -m venv /opt/tflocal \
- && /opt/tflocal/bin/pip install --no-cache-dir "terraform-local==${TFLOCAL_VERSION}" \
- && ln -s /opt/tflocal/bin/tflocal /usr/local/bin/tflocal
 
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1

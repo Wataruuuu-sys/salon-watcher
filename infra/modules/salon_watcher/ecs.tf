@@ -10,7 +10,7 @@ locals {
     SOURCES_DISABLED = var.sources_disabled
     NOTIFY_FROM      = var.notify_from
     NOTIFY_TO        = var.notify_to
-    UI_URL           = local.site_url == null ? "" : local.site_url
+    UI_URL           = local.site_url
   }
 }
 

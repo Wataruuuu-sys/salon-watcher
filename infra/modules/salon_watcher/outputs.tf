@@ -3,15 +3,15 @@ output "site_url" {
 }
 
 output "site_bucket" {
-  value = var.create_site ? aws_s3_bucket.site[0].id : null
+  value = aws_s3_bucket.site.id
 }
 
 output "distribution_id" {
-  value = var.create_site ? aws_cloudfront_distribution.site[0].id : null
+  value = aws_cloudfront_distribution.site.id
 }
 
 output "api_url" {
-  value = var.create_api ? aws_apigatewayv2_api.http[0].api_endpoint : null
+  value = aws_apigatewayv2_api.http.api_endpoint
 }
 
 output "cognito_authority" {
@@ -19,15 +19,15 @@ output "cognito_authority" {
 }
 
 output "cognito_client_id" {
-  value = var.create_cognito ? aws_cognito_user_pool_client.web[0].id : null
+  value = aws_cognito_user_pool_client.web.id
 }
 
 output "cognito_domain" {
-  value = var.create_cognito ? "${var.cognito_domain_prefix}.auth.${data.aws_region.current.name}.amazoncognito.com" : null
+  value = "${var.cognito_domain_prefix}.auth.${data.aws_region.current.name}.amazoncognito.com"
 }
 
 output "user_pool_id" {
-  value = var.create_cognito ? aws_cognito_user_pool.main[0].id : null
+  value = aws_cognito_user_pool.main.id
 }
 
 output "ecr_repository_url" {
