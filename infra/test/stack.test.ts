@@ -25,7 +25,7 @@ function definition(): { States: Record<string, Record<string, unknown>> } {
 }
 
 beforeAll(() => {
-  const out = path.resolve(here, '../../web/out');
+  const out = path.resolve(here, '../../frontend/out');
   if (!existsSync(out)) {
     mkdirSync(out, { recursive: true });
     writeFileSync(path.join(out, 'index.html'), '<html></html>');

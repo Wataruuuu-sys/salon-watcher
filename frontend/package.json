@@ -1,5 +1,5 @@
 {
-  "name": "@salon-watcher/web",
+  "name": "@salon-watcher/frontend",
   "private": true,
   "version": "4.0.0",
   "scripts": {

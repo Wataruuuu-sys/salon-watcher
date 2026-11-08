@@ -88,7 +88,7 @@ export class SalonWatcherStack extends Stack {
     });
     const siteUrl = `https://${distribution.distributionDomainName}`;
     new s3deploy.BucketDeployment(this, 'SiteDeployment', {
-      sources: [s3deploy.Source.asset(path.join(repoRoot, 'web/out'))],
+      sources: [s3deploy.Source.asset(path.join(repoRoot, 'frontend/out'))],
       destinationBucket: siteBucket,
       distribution,
       distributionPaths: ['/*'],

@@ -14,6 +14,6 @@
 
 - 新店サロンウォッチャー v4: 多摩地域26市の新規美容サロンを Google Map / Threads から収集し、根拠URL付きリードとして通知する個人ツール。
 - 設計書: `docs/superpowers/specs/2026-10-18-salon-watcher-v4-design.md`（判断の拠り所。最悪の失敗は「本当の新店を見逃すこと」）
-- 構成: `backend/`（TypeScript, Vitest, Drizzle + PostgreSQL）、`infra/`（AWS CDK）、`web/`（Next.js 静的書き出し）、`legacy/gas-v3/`（旧GAS版、参照用）
-- テスト: `npm -w backend test`（ローカル PostgreSQL `postgres://localhost:5432/salon_test`）、`npm -w infra test`、`npm -w web test`
+- 構成: `backend/`（TypeScript, Vitest, Drizzle + PostgreSQL）、`infra/`（AWS CDK）、`frontend/`（Next.js 静的書き出し）、`legacy/gas-v3/`（旧GAS版、参照用）
+- テスト: `npm -w backend test`（ローカル PostgreSQL `postgres://localhost:5432/salon_test`）、`npm -w infra test`、`npm -w frontend test`
 - デプロイ手順: `docs/deploy.md`

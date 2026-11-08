@@ -1,4 +1,4 @@
-// Duplicated from backend config on purpose: web must not import backend code.
+// Duplicated from backend config on purpose: frontend must not import backend code.
 export const GENRE_OPTIONS: { id: string; label: string }[] = [
   { id: 'hair', label: 'ヘア' },
   { id: 'nail', label: 'ネイル' },

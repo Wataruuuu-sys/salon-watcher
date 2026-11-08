@@ -58,12 +58,12 @@ aws ssm put-parameter --name /salon-watcher/THREADS_ACCESS_TOKEN --type SecureSt
 
 Web UI は API の URL や Cognito の値をビルド時に埋め込むため、1回目のデプロイで値を作り、2回目で正しい値を入れた UI を配信します。
 
-> **毎回のデプロイ前に必ず `npm -w web run build` で `web/out` を作り直してください。** インフラのテスト（`npm -w infra test`）は `web/out` が無いと仮の `index.html` だけを置くため、そのままデプロイすると空のページが配信されます。
+> **毎回のデプロイ前に必ず `npm -w frontend run build` で `frontend/out` を作り直してください。** インフラのテスト（`npm -w infra test`）は `frontend/out` が無いと仮の `index.html` だけを置くため、そのままデプロイすると空のページが配信されます。
 
 ### 4-1. 1回目（仮の環境変数で）
 
 ```sh
-npm -w web run build
+npm -w frontend run build
 cd infra
 npx cdk deploy \
   -c ownerEmail=<ownerEmail> \
@@ -82,13 +82,13 @@ export NEXT_PUBLIC_API_URL=<ApiUrl>
 export NEXT_PUBLIC_COGNITO_AUTHORITY=<CognitoAuthority>
 export NEXT_PUBLIC_COGNITO_CLIENT_ID=<UserPoolClientId>
 export NEXT_PUBLIC_REDIRECT_URI=<SiteUrl>/callback/
-npm -w web run build
+npm -w frontend run build
 cd infra
 npx cdk deploy -c ownerEmail=<ownerEmail> -c notifyFrom=<notifyFrom> -c notifyTo=<notifyTo> \
   -c cognitoDomainPrefix=<cognitoDomainPrefix> -c sourcesDisabled=threads
 ```
 
-以後の再デプロイも、同じ `NEXT_PUBLIC_*` を設定して `web/out` をビルドしてから行います。
+以後の再デプロイも、同じ `NEXT_PUBLIC_*` を設定して `frontend/out` をビルドしてから行います。
 
 ## 5. メール（SES / SNS）
 
@@ -135,5 +135,5 @@ DATABASE_URL='<接続文字列>' npm -w backend run import-v3 -- ./known_places.
 ## 9. 停止・ロールバック
 
 - **止める:** EventBridge Scheduler コンソールで 4 つのスケジュール（Threads / GoogleMaps / Notify / TokenRefresh）を「無効化」します。データとインフラはそのまま残ります。
-- **前の版に戻す:** 戻したいコミットを checkout し、4 章と同じ手順（`web/out` をビルド → `cdk deploy`）で再デプロイします。
+- **前の版に戻す:** 戻したいコミットを checkout し、4 章と同じ手順（`frontend/out` をビルド → `cdk deploy`）で再デプロイします。
 - **完全に削除:** `npx cdk destroy`（Cognito ユーザープールは保持設定のため手動削除が必要）。Neon のデータは別途削除します。
