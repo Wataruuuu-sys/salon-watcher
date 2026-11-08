@@ -13,3 +13,6 @@ frontend/next-env.d.ts
 *.tfvars
 !*.tfvars.example
 *.tfplan
+
+# Local scratch files (not committed)
+tmp/
