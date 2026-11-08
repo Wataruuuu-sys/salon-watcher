@@ -2,6 +2,8 @@ data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
 locals {
+  bedrock_region = coalesce(var.bedrock_region, data.aws_region.current.name)
+
   ssm_parameter_arn_prefix = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/salon-watcher"
 
   # Secrets live under /salon-watcher/* (DATABASE_URL is registered by hand, never by Terraform).
@@ -45,6 +47,16 @@ resource "aws_iam_role_policy" "task" {
         Effect   = "Allow"
         Action   = ["ses:SendEmail", "ses:SendRawEmail"]
         Resource = "*"
+      },
+      {
+        # Threads classifier (Claude in Amazon Bedrock). Inference is authorized on the account's
+        # bedrock-mantle projects; the model is narrowed with the bedrock-mantle:Model condition key.
+        Effect   = "Allow"
+        Action   = ["bedrock-mantle:CreateInference"]
+        Resource = "arn:aws:bedrock-mantle:${local.bedrock_region}:${data.aws_caller_identity.current.account_id}:project/*"
+        Condition = {
+          StringLike = { "bedrock-mantle:Model" = ["anthropic.claude-haiku-5-5", "*.anthropic.claude-haiku-5-5"] }
+        }
       },
     ]
   })

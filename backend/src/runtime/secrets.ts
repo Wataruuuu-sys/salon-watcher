@@ -2,7 +2,7 @@ import { type SecretStore, ssmSecretStore } from '../lib/secrets.js';
 import { type Env, fakesEnabled, isLocal } from './mode.js';
 
 /** Keys only the (faked) external clients use; DATABASE_URL is never faked. */
-const FAKEABLE_KEYS = new Set(['PLACES_API_KEY', 'THREADS_ACCESS_TOKEN', 'ANTHROPIC_API_KEY']);
+const FAKEABLE_KEYS = new Set(['PLACES_API_KEY', 'THREADS_ACCESS_TOKEN']);
 
 /** Secrets from environment variables; put() only mutates the given env object (in memory). */
 export function envSecretStore(env: Env): SecretStore {

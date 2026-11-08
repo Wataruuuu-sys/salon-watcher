@@ -1,4 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { AnthropicBedrockMantle } from '@anthropic-ai/bedrock-sdk';
+import type { Message, MessageCreateParamsNonStreaming, Tool } from '@anthropic-ai/sdk/resources/messages';
 import type { Classification, Genre, Verdict } from '../domain/types.js';
 import { TAMA_CITIES } from '../config/areas.js';
 import { GENRES } from '../config/genres.js';
@@ -13,7 +14,7 @@ export interface ClassifyInput {
 
 export interface LlmClassifier {
   /** Distinguishes the real classifier from the local-development fake. */
-  kind?: 'anthropic' | 'fake';
+  kind?: 'bedrock' | 'fake';
   classify(input: ClassifyInput): Promise<Classification>;
 }
 
@@ -41,7 +42,7 @@ ${GENRES.map((g) => `- ${g.id}: ${g.label}`).join('\n')}
 
 city は対象26市のいずれかに該当するときだけその市名を入れ、分からなければ null。openingDate は分かれば YYYY-MM-DD、不明なら null。reason は日本語で簡潔に。`;
 
-export const CLASSIFY_TOOL: Anthropic.Tool = {
+export const CLASSIFY_TOOL: Tool = {
   name: TOOL_NAME,
   description: 'Record the classification of the SNS post.',
   input_schema: {
@@ -92,7 +93,17 @@ export function parseClassification(raw: unknown): Classification {
 }
 
 /** Per-request bound so one hung call cannot eat the process Lambda's time budget. */
-export const ANTHROPIC_CLIENT_OPTIONS = { timeout: 30_000, maxRetries: 2 };
+export const BEDROCK_CLIENT_OPTIONS = { timeout: 30_000, maxRetries: 2 };
+
+/** Claude Haiku 5.5 on Claude in Amazon Bedrock (an inference profile ID such as `jp.…` also works). */
+export const DEFAULT_CLASSIFY_MODEL_ID = 'anthropic.claude-haiku-5-5';
+
+/** The part of the Bedrock client the classifier uses (tests inject a stub). */
+export interface MessagesClient {
+  messages: {
+    create(body: MessageCreateParamsNonStreaming): Promise<Pick<Message, 'content'>>;
+  };
+}
 
 const jstDate = (d: Date): string => d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
 
@@ -106,14 +117,22 @@ export function buildUserContent({ text, authorHandle, postedAt, now }: Classify
   ].join('\n');
 }
 
-export function anthropicClassifier(apiKey: string, model = 'claude-haiku-5-5'): LlmClassifier {
-  const client = new Anthropic({ apiKey, ...ANTHROPIC_CLIENT_OPTIONS });
+export interface BedrockClassifierOptions {
+  modelId: string;
+  /** AWS region of the Bedrock endpoint; undefined lets the SDK read AWS_REGION / AWS_DEFAULT_REGION. */
+  region?: string;
+  client?: MessagesClient;
+}
+
+/** Calls Claude through Claude in Amazon Bedrock, authenticating with the AWS default credential chain. */
+export function bedrockClassifier({ modelId, region, client }: BedrockClassifierOptions): LlmClassifier {
+  const bedrock: MessagesClient = client ?? new AnthropicBedrockMantle({ awsRegion: region, ...BEDROCK_CLIENT_OPTIONS });
   return {
-    kind: 'anthropic',
+    kind: 'bedrock',
     async classify(input) {
       const userContent = buildUserContent(input);
-      const res = await client.messages.create({
-        model,
+      const res = await bedrock.messages.create({
+        model: modelId,
         max_tokens: 1024,
         // Forced single-tool use is incompatible with thinking, so thinking is off.
         thinking: { type: 'disabled' },

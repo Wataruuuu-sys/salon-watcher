@@ -1,6 +1,6 @@
 # 開発ガイド
 
-ローカルでは外部アカウント（AWS・Google・Anthropic・Meta）なしで、すべて Docker 上で動かせます。
+ローカルでは外部アカウント（AWS・Google・Meta）なしで、すべて Docker 上で動かせます。
 
 ## 1. 前提
 
@@ -61,7 +61,7 @@ docker compose run --rm batch notify
 
 ### 本物の API への切り替え
 
-`.env` に `PLACES_API_KEY` / `ANTHROPIC_API_KEY` / `THREADS_ACCESS_TOKEN` を書き、`FAKE_EXTERNAL=` を空（または `0`）にします。バッチを再実行すれば反映されます（`api` は `docker compose up -d --force-recreate api`）。実 API は課金・レート制限があるので、まず `--sources google_maps` 単体で小さく試してください。
+`.env` に `PLACES_API_KEY` / `THREADS_ACCESS_TOKEN` を書き、`FAKE_EXTERNAL=` を空（または `0`）にします。Claude（判定）は Amazon Bedrock 経由なので API キーは不要で、Bedrock を呼べる AWS 認証情報が要ります: `.env` に `AWS_REGION` とアクセスキー（`AWS_ACCESS_KEY_ID` など）を書くか、`AWS_PROFILE` を書いて `docker-compose.yml` の `batch` にある `~/.aws` の読み取り専用マウントのコメントを外します（`.env.example` 参照。モデルは `CLASSIFY_MODEL_ID`、既定 `anthropic.claude-haiku-5-5`）。バッチを再実行すれば反映されます（`api` は `docker compose up -d --force-recreate api`）。実 API は課金・レート制限があるので、まず `--sources google_maps` 単体で小さく試してください。
 
 ## 5. テスト
 

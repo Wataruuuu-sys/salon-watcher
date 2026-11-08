@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { externalDepsFor } from '../../src/runtime/external.js';
+import { bedrockSettingsFor, externalDepsFor } from '../../src/runtime/external.js';
 import { buildRegistry } from '../../src/sources/registry.js';
 import { checkHpb } from '../../src/hpb/check.js';
 import type { SourceContext } from '../../src/sources/types.js';
@@ -18,12 +18,26 @@ function ctxFor(db: Db): SourceContext {
 
 describe('externalDepsFor', () => {
   it('ignores FAKE_EXTERNAL outside local mode', () => {
-    expect(externalDepsFor({ FAKE_EXTERNAL: '1' }).llm('k').kind).toBe('anthropic');
+    expect(externalDepsFor({ FAKE_EXTERNAL: '1', AWS_REGION: 'ap-northeast-1' }).llm().kind).toBe('bedrock');
+  });
+
+  it('reads the Bedrock model ID and region from the env', () => {
+    expect(bedrockSettingsFor({ AWS_REGION: 'ap-northeast-1' })).toEqual({
+      modelId: 'anthropic.claude-haiku-5-5',
+      region: 'ap-northeast-1',
+    });
+    expect(
+      bedrockSettingsFor({ AWS_REGION: 'ap-northeast-1', BEDROCK_REGION: 'us-east-1', CLASSIFY_MODEL_ID: 'jp.anthropic.claude-haiku-5-5' }),
+    ).toEqual({ modelId: 'jp.anthropic.claude-haiku-5-5', region: 'us-east-1' });
+    expect(bedrockSettingsFor({ BEDROCK_REGION: '', CLASSIFY_MODEL_ID: '' })).toEqual({
+      modelId: 'anthropic.claude-haiku-5-5',
+      region: undefined,
+    });
   });
 
   it('uses fakes in local mode with FAKE_EXTERNAL=1', async () => {
     const deps = externalDepsFor(LOCAL_FAKE);
-    const llm = deps.llm('k');
+    const llm = deps.llm();
     expect(llm.kind).toBe('fake');
     const base = { authorHandle: null, postedAt: null };
     expect((await llm.classify({ ...base, text: '立川駅北口にOPEN' })).verdict).toBe('yes');

@@ -14,13 +14,13 @@ let cached: Promise<Omit<HandlerContext, 'now'>> | undefined;
 export function buildContext(env: Env = process.env): Promise<HandlerContext> {
   cached ??= (async () => {
     const secrets = secretStoreFor(env);
-    const [databaseUrl, apiKey] = await Promise.all([secrets.get('DATABASE_URL'), secrets.get('ANTHROPIC_API_KEY')]);
+    const databaseUrl = await secrets.get('DATABASE_URL');
     return {
       db: createDb(databaseUrl),
       http: fetch,
       secrets,
       log: createLogger(),
-      llm: externalDepsFor(env).llm(apiKey),
+      llm: externalDepsFor(env).llm(),
     };
   })();
   cached.catch(() => {

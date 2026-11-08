@@ -48,6 +48,10 @@ services:
     environment:
       APP_ENV: local
       DATABASE_URL: postgres://postgres:postgres@db:5432/salon_dev
+    # Real Bedrock classifier with an AWS profile (AWS_PROFILE in .env): uncomment to share the host's
+    # AWS config read-only. Access-key variables in .env work without it.
+    # volumes:
+    #   - ${HOME}/.aws:/home/node/.aws:ro
     depends_on:
       db:
         condition: service_healthy

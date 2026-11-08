@@ -27,7 +27,7 @@ export async function buildBatchContext(env: Env): Promise<BatchContext> {
   const log = createLogger();
   const secrets = secretStoreFor(env);
   const external = externalDepsFor(env);
-  const [databaseUrl, apiKey] = await Promise.all([secrets.get('DATABASE_URL'), secrets.get('ANTHROPIC_API_KEY')]);
+  const databaseUrl = await secrets.get('DATABASE_URL');
   const db = createDb(databaseUrl);
   return {
     db,
@@ -35,7 +35,7 @@ export async function buildBatchContext(env: Env): Promise<BatchContext> {
     secrets,
     now: new Date(),
     log,
-    llm: external.llm(apiKey),
+    llm: external.llm(),
     getSource: buildRegistry(external.sources).getSource,
     hpbHttp: external.hpbHttp,
     mail: (subject, body) => mailerFor(env, log)(subject, body),

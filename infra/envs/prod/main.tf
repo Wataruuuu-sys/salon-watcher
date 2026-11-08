@@ -34,6 +34,8 @@ module "salon_watcher" {
   cognito_domain_prefix = var.cognito_domain_prefix
   sources_disabled      = var.sources_disabled
   batch_image_tag       = var.batch_image_tag
+  classify_model_id     = var.classify_model_id
+  bedrock_region        = var.bedrock_region
   api_zip_path          = "${path.root}/../../../backend/dist/api.zip"
 }
 

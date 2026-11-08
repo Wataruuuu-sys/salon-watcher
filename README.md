@@ -8,7 +8,7 @@
 flowchart LR
   Scheduler[EventBridge Scheduler] --> Batch[ECS Fargate バッチ]
   Batch --> Neon[(Neon PostgreSQL)]
-  Batch --> Ext[Google Places / Threads / Claude / SES]
+  Batch --> Ext[Google Places / Threads / Claude on Bedrock / SES]
   User[ブラウザ] --> CF[CloudFront] --> S3[S3 静的サイト]
   User --> Api[HTTP API] --> Lambda[API Lambda] --> Neon
   Cognito[Cognito] -. JWT .-> Api
