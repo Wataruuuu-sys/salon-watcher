@@ -4,7 +4,7 @@ import { getTestDb, resetDb } from '../helpers/db.js';
 import { ingestRawItems } from '../../src/sources/ingest.js';
 import { evidence, rawItems, stores } from '../../src/db/schema.js';
 import { resolveStore } from '../../src/resolve/resolveStore.js';
-import { processPending } from '../../src/handlers/process.js';
+import { processPending } from '../../src/pipeline/process.js';
 import type { Classification, RawItemInput } from '../../src/domain/types.js';
 import type { LlmClassifier } from '../../src/classify/classify.js';
 
@@ -144,19 +144,6 @@ describe('processPending', () => {
     expect(errors).toHaveLength(1);
     const rows = await db.select().from(rawItems).orderBy(rawItems.id);
     expect(rows.map((r) => r.status)).toEqual(['pending', 'resolved']);
-  });
-
-  it('picks no new items once the deadline has passed', async () => {
-    await ingestRawItems(db, [threadsItem()]);
-    const { llm, calls } = fakeLlm(() => cls({ storeName: 'Lily' }));
-    expect(await processPending(db, llm, 500, { deadline: Date.now() - 1, log: { info() {}, warn() {}, error() {} } })).toEqual({
-      resolved: 0,
-      rejected: 0,
-      retried: 0,
-    });
-    expect(calls).toHaveLength(0);
-    const [raw] = await db.select().from(rawItems);
-    expect(raw!.status).toBe('pending');
   });
 
   it('passes the current time to the classifier', async () => {

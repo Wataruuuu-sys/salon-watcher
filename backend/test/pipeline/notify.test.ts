@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { getTestDb, resetDb } from '../helpers/db.js';
 import { evidence, rawItems, stores } from '../../src/db/schema.js';
-import { runNotify } from '../../src/handlers/notify.js';
+import { runNotify } from '../../src/pipeline/notify.js';
 
 const db = await getTestDb();
 const now = new Date('2026-10-18T00:00:00Z');

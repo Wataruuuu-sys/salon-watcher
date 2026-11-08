@@ -4,12 +4,11 @@ import type { Db } from '../db/client.js';
 import { evidence, rawItems, stores } from '../db/schema.js';
 import type { Confidence } from '../domain/types.js';
 import { composeDigest, type LeadForMail } from '../notify/compose.js';
-import { sesSender } from '../notify/send.js';
-import { buildContext } from './context.js';
+import type { SendMail } from '../notify/send.js';
 
 export async function runNotify(
   db: Db,
-  send: (subject: string, body: string) => Promise<void>,
+  send: SendMail,
   opts: { uiUrl: string; now: Date },
 ): Promise<{ sent: boolean; main: number; maybe: number }> {
   const targets = await db
@@ -61,15 +60,4 @@ export async function runNotify(
     .set({ notifiedAt: opts.now })
     .where(and(isNull(stores.notifiedAt), eq(stores.hpbStatus, 'listed')));
   return { sent: digest !== null, main: main.length, maybe: maybeCount };
-}
-
-export async function notifyHandler(): Promise<{ sent: boolean; main: number; maybe: number }> {
-  const ctx = await buildContext();
-  const from = process.env.NOTIFY_FROM;
-  const to = (process.env.NOTIFY_TO ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-  const uiUrl = process.env.UI_URL ?? '';
-  if (!from || to.length === 0) throw new Error('NOTIFY_FROM and NOTIFY_TO must be set');
-  const result = await runNotify(ctx.db, sesSender(from, to), { uiUrl, now: ctx.now });
-  ctx.log.info('notify done', result);
-  return result;
 }

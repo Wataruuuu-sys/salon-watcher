@@ -7,7 +7,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "migrate": "drizzle-kit migrate",
-    "import-v3": "tsx src/cli/importV3.ts"
+    "import-v3": "tsx src/cli/importV3.ts",
+    "batch": "tsx src/batch/main.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

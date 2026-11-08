@@ -5,7 +5,6 @@ import { rawItems } from '../db/schema.js';
 import type { Classification, Confidence } from '../domain/types.js';
 import { resolveStore } from '../resolve/resolveStore.js';
 import { createLogger, type Logger } from '../lib/log.js';
-import { buildContext } from './context.js';
 
 const MAX_ATTEMPTS = 3;
 
@@ -24,7 +23,7 @@ export async function processPending(
   db: Db,
   llm: LlmClassifier,
   limit = 500,
-  deps: { log?: Logger; resolve?: typeof resolveStore; /** Epoch ms after which no new item is started. */ deadline?: number } = {},
+  deps: { log?: Logger; resolve?: typeof resolveStore } = {},
 ): Promise<{ resolved: number; rejected: number; retried: number }> {
   const pending = await db
     .select()
@@ -37,10 +36,6 @@ export async function processPending(
   const resolve = deps.resolve ?? resolveStore;
   const out = { resolved: 0, rejected: 0, retried: 0 };
   for (const item of pending) {
-    if (deps.deadline !== undefined && Date.now() > deps.deadline) {
-      log.warn('process deadline reached; leaving the rest pending', { remaining: pending.length - pending.indexOf(item) });
-      break;
-    }
     let classification: Classification;
     let confidence: Confidence;
     if (item.preclassified) {
@@ -90,15 +85,4 @@ export async function processPending(
     }
   }
   return out;
-}
-
-/** Stop starting new items well before the 15-minute Lambda timeout. */
-const PROCESS_BUDGET_MS = 12 * 60 * 1000;
-
-export async function processHandler(): ReturnType<typeof processPending> {
-  const deadline = Date.now() + PROCESS_BUDGET_MS;
-  const ctx = await buildContext();
-  const result = await processPending(ctx.db, ctx.llm, 500, { log: ctx.log, deadline });
-  ctx.log.info('processed', result);
-  return result;
 }
