@@ -2,7 +2,7 @@
   "name": "salon-watcher",
   "private": true,
   "version": "4.0.0",
-  "workspaces": ["backend", "frontend", "infra"],
+  "workspaces": ["backend", "frontend"],
   "scripts": {
     "test": "npm -w backend test",
     "check:compose": "node scripts/check-compose.mjs"

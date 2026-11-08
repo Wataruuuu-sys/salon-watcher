@@ -1,9 +1,15 @@
 .superpowers/
 node_modules/
 dist/
-cdk.out/
 frontend/out/
 .next/
 frontend/next-env.d.ts
 *.tsbuildinfo
 .env
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+*.tfplan

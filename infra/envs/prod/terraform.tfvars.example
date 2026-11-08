@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars (git-ignored) and fill in real values.
+owner_email           = "owner@salon-watcher.invalid"
+notify_from           = "notify@salon-watcher.invalid"
+notify_to             = "a@salon-watcher.invalid,b@salon-watcher.invalid"
+cognito_domain_prefix = "salon-watcher-yourname"
+sources_disabled      = "threads"

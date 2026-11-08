@@ -1,0 +1,1 @@
+Placeholder for backend/dist/api.zip in terraform tests: plan with a mocked provider only hashes this file.
