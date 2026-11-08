@@ -6,6 +6,8 @@ frontend/out/
 frontend/next-env.d.ts
 *.tsbuildinfo
 .env
+.env.*
+!.env.example
 # Terraform
 .terraform/
 *.tfstate
