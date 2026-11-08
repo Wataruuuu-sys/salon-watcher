@@ -24,8 +24,6 @@ export interface RunOptions {
 }
 
 const PROCESS_BATCH = 500;
-/** Postgres advisory-lock key serializing the process + HPB phases across overlapping batch tasks. */
-export const PROCESS_LOCK_KEY = 7301801;
 /** Stand-in shard name for a failed listShards. */
 const LIST_SHARDS = '(listShards)';
 
@@ -36,46 +34,6 @@ async function eachLimited<T>(items: T[], limit: number, fn: (item: T) => Promis
     while (next < items.length) await fn(items[next++]!);
   };
   await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker));
-}
-
-/** Classify until nothing is pending, then check HPB. A failed step is recorded and the next still runs. */
-async function processAndHpb(
-  ctx: BatchContext,
-  opts: RunOptions,
-): Promise<{ processed: number; hpbChecked: number; ok: boolean }> {
-  let ok = true;
-  // Repeat until a round comes back short (nothing left) or makes no progress (only retries left).
-  const processRound = opts.process ?? processPending;
-  let processed = 0;
-  try {
-    for (;;) {
-      const r = await processRound(ctx.db, ctx.llm, PROCESS_BATCH, { log: ctx.log });
-      ctx.log.info('processed', r);
-      processed += r.resolved + r.rejected;
-      if (r.failed > 0) ok = false; // items given up after repeated resolve failures
-      const progress = r.resolved + r.rejected + r.failed;
-      if (r.resolved + r.rejected + r.retried + r.failed < PROCESS_BATCH) break;
-      if (progress === 0) {
-        const [row] = await ctx.db.select({ n: count() }).from(rawItems).where(eq(rawItems.status, 'pending'));
-        ctx.log.warn('process made no progress; leaving items pending', { pending: row?.n ?? 0 });
-        ok = false;
-        break;
-      }
-    }
-  } catch (err) {
-    ctx.log.error('process failed', { error: String(err) });
-    ok = false;
-  }
-
-  let hpbChecked = 0;
-  try {
-    hpbChecked = await runHpb(ctx, opts.hpbLimit ?? HPB_LIMIT, opts.hpbSleep);
-  } catch (err) {
-    ctx.log.error('hpb check failed', { error: String(err) });
-    ok = false;
-  }
-
-  return { processed, hpbChecked, ok };
 }
 
 /**
@@ -111,28 +69,35 @@ export async function runPipeline(ctx: BatchContext, sources: SourceId[], opts: 
   });
   if (collected.some((c) => !c.ok)) ok = false;
 
-  // processPending is not race-safe, so overlapping runs (separate tasks) take turns: the loser skips.
-  const lock = await ctx.db.$client.reserve();
+  // Repeat until a round comes back short (nothing left) or makes no progress (only retries left).
+  const processRound = opts.process ?? processPending;
   let processed = 0;
-  let hpbChecked = 0;
   try {
-    const [row] = await lock`select pg_try_advisory_lock(${PROCESS_LOCK_KEY}) as got`;
-    if (!row?.got) {
-      ctx.log.info('another run is processing; skipping process/hpb');
-    } else {
-      try {
-        const r = await processAndHpb(ctx, opts);
-        processed = r.processed;
-        hpbChecked = r.hpbChecked;
-        if (!r.ok) ok = false;
-      } finally {
-        await lock`select pg_advisory_unlock(${PROCESS_LOCK_KEY})`.catch((err) =>
-          ctx.log.error('advisory unlock failed', { error: String(err) }),
-        );
+    for (;;) {
+      const r = await processRound(ctx.db, ctx.llm, PROCESS_BATCH, { log: ctx.log });
+      ctx.log.info('processed', r);
+      processed += r.resolved + r.rejected;
+      if (r.failed > 0) ok = false; // items given up after repeated resolve failures
+      const progress = r.resolved + r.rejected + r.failed;
+      if (r.resolved + r.rejected + r.retried + r.failed < PROCESS_BATCH) break;
+      if (progress === 0) {
+        const [row] = await ctx.db.select({ n: count() }).from(rawItems).where(eq(rawItems.status, 'pending'));
+        ctx.log.warn('process made no progress; leaving items pending', { pending: row?.n ?? 0 });
+        ok = false;
+        break;
       }
     }
-  } finally {
-    lock.release();
+  } catch (err) {
+    ctx.log.error('process failed', { error: String(err) });
+    ok = false;
+  }
+
+  let hpbChecked = 0;
+  try {
+    hpbChecked = await runHpb(ctx, opts.hpbLimit ?? HPB_LIMIT, opts.hpbSleep);
+  } catch (err) {
+    ctx.log.error('hpb check failed', { error: String(err) });
+    ok = false;
   }
 
   return { collected, processed, hpbChecked, ok };
