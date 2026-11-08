@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { getTestDb, resetDb } from '../helpers/db.js';
 import { rawItems, stores } from '../../src/db/schema.js';
-import { runPipeline } from '../../src/batch/run.js';
+import { PROCESS_LOCK_KEY, runPipeline } from '../../src/batch/run.js';
 import type { BatchContext } from '../../src/batch/context.js';
 import { processPending } from '../../src/pipeline/process.js';
 import { buildRegistry } from '../../src/sources/registry.js';
@@ -24,13 +24,17 @@ const post = (id: string, text: string): RawItemInput => ({
   payload: {},
 });
 
-function ctxWith(sources: Source[], env: Record<string, string | undefined> = {}): BatchContext {
+function ctxWith(
+  sources: Source[],
+  env: Record<string, string | undefined> = {},
+  log: BatchContext['log'] = quiet,
+): BatchContext {
   return {
     db,
     http: fetch,
     secrets: { get: async () => 'KEY', put: async () => {} },
     now: new Date(),
-    log: quiet,
+    log,
     llm: fakeLlmClassifier(),
     getSource: buildRegistry(sources).getSource,
     hpbHttp: fakeHpbHttp,
@@ -82,6 +86,50 @@ describe('runPipeline', () => {
     expect(listed).toBe(0);
     expect(r.collected).toEqual([]);
     expect(r.ok).toBe(true);
+  });
+
+  it('logs which requested source is skipped by SOURCES_DISABLED', async () => {
+    const infos: [string, unknown][] = [];
+    const log = { ...quiet, info: (m: string, f?: unknown) => void infos.push([m, f]) };
+    const source: Source = { id: 'threads', listShards: async () => ['all'], collect: async () => [] };
+    await runPipeline(ctxWith([source], { SOURCES_DISABLED: 'threads' }, log), ['threads'], { hpbSleep: noSleep });
+    expect(infos).toContainEqual(['source skipped (SOURCES_DISABLED)', { source: 'threads' }]);
+  });
+
+  it('skips process/hpb without failing when another run holds the processing lock', async () => {
+    const infos: string[] = [];
+    const log = { ...quiet, info: (m: string) => void infos.push(m) };
+    const source: Source = {
+      id: 'threads',
+      listShards: async () => ['all'],
+      collect: async () => [post('p1', '11/1 立川駅北口に Nail Salon Lily 立川店 OPEN')],
+    };
+    const holder = await db.$client.reserve();
+    try {
+      await holder`select pg_advisory_lock(${PROCESS_LOCK_KEY})`;
+      const r = await runPipeline(ctxWith([source], {}, log), ['threads'], { hpbSleep: noSleep });
+      expect(r.ok).toBe(true);
+      expect(r.collected).toEqual([{ source: 'threads', shard: 'all', ok: true }]);
+      expect(r.processed).toBe(0);
+      expect(infos).toContain('another run is processing; skipping process/hpb');
+      const [row] = await db.select().from(rawItems);
+      expect(row!.status).toBe('pending');
+    } finally {
+      await holder`select pg_advisory_unlock(${PROCESS_LOCK_KEY})`;
+      holder.release();
+    }
+  });
+
+  it('releases the processing lock after a normal run', async () => {
+    await runPipeline(ctxWith([]), [], { hpbSleep: noSleep });
+    const probe = await db.$client.reserve();
+    try {
+      const [row] = await probe`select pg_try_advisory_lock(${PROCESS_LOCK_KEY}) as got`;
+      expect(row!.got).toBe(true);
+      await probe`select pg_advisory_unlock(${PROCESS_LOCK_KEY})`;
+    } finally {
+      probe.release();
+    }
   });
 
   it('records a listShards failure and still processes', async () => {

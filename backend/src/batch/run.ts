@@ -24,6 +24,8 @@ export interface RunOptions {
 }
 
 const PROCESS_BATCH = 500;
+/** Postgres advisory-lock key serializing the process + HPB phases across overlapping batch tasks. */
+export const PROCESS_LOCK_KEY = 7301801;
 /** Stand-in shard name for a failed listShards. */
 const LIST_SHARDS = '(listShards)';
 
@@ -36,35 +38,12 @@ async function eachLimited<T>(items: T[], limit: number, fn: (item: T) => Promis
   await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker));
 }
 
-/**
- * Collect every shard of the requested (enabled) sources in parallel, then classify until nothing is
- * pending, then check HPB. A failed step is recorded and the later steps still run; `ok` reports it.
- */
-export async function runPipeline(ctx: BatchContext, sources: SourceId[], opts: RunOptions = {}): Promise<RunResult> {
-  const enabled = new Set(enabledSources(ctx.env));
-  const collected: RunResult['collected'] = [];
+/** Classify until nothing is pending, then check HPB. A failed step is recorded and the next still runs. */
+async function processAndHpb(
+  ctx: BatchContext,
+  opts: RunOptions,
+): Promise<{ processed: number; hpbChecked: number; ok: boolean }> {
   let ok = true;
-
-  const tasks: { source: SourceId; shard: string }[] = [];
-  for (const source of sources.filter((s) => enabled.has(s))) {
-    try {
-      for (const shard of await ctx.getSource(source).listShards(ctx)) tasks.push({ source, shard });
-    } catch (err) {
-      ctx.log.error('list shards failed', { source, error: String(err) });
-      collected.push({ source, shard: LIST_SHARDS, ok: false, error: String(err) });
-    }
-  }
-  await eachLimited(tasks, opts.shardConcurrency ?? 7, async ({ source, shard }) => {
-    try {
-      await runCollect(ctx, source, shard);
-      collected.push({ source, shard, ok: true });
-    } catch (err) {
-      ctx.log.error('collect failed', { source, shard, error: String(err) });
-      collected.push({ source, shard, ok: false, error: String(err) });
-    }
-  });
-  if (collected.some((c) => !c.ok)) ok = false;
-
   // Repeat until a round comes back short (nothing left) or makes no progress (only retries left).
   const processRound = opts.process ?? processPending;
   let processed = 0;
@@ -94,6 +73,66 @@ export async function runPipeline(ctx: BatchContext, sources: SourceId[], opts: 
   } catch (err) {
     ctx.log.error('hpb check failed', { error: String(err) });
     ok = false;
+  }
+
+  return { processed, hpbChecked, ok };
+}
+
+/**
+ * Collect every shard of the requested (enabled) sources in parallel, then classify until nothing is
+ * pending, then check HPB. A failed step is recorded and the later steps still run; `ok` reports it.
+ */
+export async function runPipeline(ctx: BatchContext, sources: SourceId[], opts: RunOptions = {}): Promise<RunResult> {
+  const enabled = new Set(enabledSources(ctx.env));
+  const collected: RunResult['collected'] = [];
+  let ok = true;
+
+  const tasks: { source: SourceId; shard: string }[] = [];
+  for (const source of sources) {
+    if (!enabled.has(source)) {
+      ctx.log.info('source skipped (SOURCES_DISABLED)', { source });
+      continue;
+    }
+    try {
+      for (const shard of await ctx.getSource(source).listShards(ctx)) tasks.push({ source, shard });
+    } catch (err) {
+      ctx.log.error('list shards failed', { source, error: String(err) });
+      collected.push({ source, shard: LIST_SHARDS, ok: false, error: String(err) });
+    }
+  }
+  await eachLimited(tasks, opts.shardConcurrency ?? 7, async ({ source, shard }) => {
+    try {
+      await runCollect(ctx, source, shard);
+      collected.push({ source, shard, ok: true });
+    } catch (err) {
+      ctx.log.error('collect failed', { source, shard, error: String(err) });
+      collected.push({ source, shard, ok: false, error: String(err) });
+    }
+  });
+  if (collected.some((c) => !c.ok)) ok = false;
+
+  // processPending is not race-safe, so overlapping runs (separate tasks) take turns: the loser skips.
+  const lock = await ctx.db.$client.reserve();
+  let processed = 0;
+  let hpbChecked = 0;
+  try {
+    const [row] = await lock`select pg_try_advisory_lock(${PROCESS_LOCK_KEY}) as got`;
+    if (!row?.got) {
+      ctx.log.info('another run is processing; skipping process/hpb');
+    } else {
+      try {
+        const r = await processAndHpb(ctx, opts);
+        processed = r.processed;
+        hpbChecked = r.hpbChecked;
+        if (!r.ok) ok = false;
+      } finally {
+        await lock`select pg_advisory_unlock(${PROCESS_LOCK_KEY})`.catch((err) =>
+          ctx.log.error('advisory unlock failed', { error: String(err) }),
+        );
+      }
+    }
+  } finally {
+    lock.release();
   }
 
   return { collected, processed, hpbChecked, ok };

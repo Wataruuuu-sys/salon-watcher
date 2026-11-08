@@ -49,7 +49,7 @@ aws ssm put-parameter --name /salon-watcher/THREADS_ACCESS_TOKEN --type SecureSt
 ```
 
 - Threads が使えるようになるまでは `THREADS_ACCESS_TOKEN` は仮の値（`placeholder`）で構いません。
-- **注意:** 毎週月曜 4:00 の `refresh-threads-token` タスクは、仮の値のままだと失敗します。失敗タスクのアラーム（後述）メールが届きますが、本物のトークンを登録するまでは想定どおりの通知なので無視して構いません。
+- `sources_disabled = "threads"`（3 章）の間は、毎週月曜 4:00 の `refresh-threads-token` タスクは「Threads 無効のためスキップ」とログに残して正常終了（終了コード 0）します。仮の値のままでもアラームは鳴りません。Threads を有効にする（`sources_disabled` から外す）前に、本物のトークンを登録してください。
 
 ## 3. Threads（Meta App Review）
 
@@ -118,7 +118,7 @@ DATABASE_URL='<接続文字列>' npm -w backend run import-v3 -- ./known_places.
 
 ### 8-1. AWS 上の通し確認（アカウント発行後に最初に行う）
 
-ローカルでは確認できない経路（Scheduler → ECS 起動、IAM 権限、SSM 読み取り、ネットワーク）を、手動起動で確かめます。
+ローカルでは確認できない経路（タスク定義・イメージ、IAM 権限、SSM 読み取り、ネットワーク、DB 接続）を、手動起動で確かめます。`run-task.sh` は RunTask を直接呼ぶため、EventBridge Scheduler 経由の起動はここでは確認できません。Scheduler の経路は、最初のスケジュール実行を見届けることと、Scheduler の `TargetErrorCount` のアラーム／メトリクスで確認します（8-2）。
 
 ```sh
 infra/scripts/run-task.sh --wait run --sources google_maps
@@ -163,7 +163,7 @@ SNS の購読確認（5 章）が済んでいないと届きません。
 
 ### 諦めた raw_items を戻す
 
-LLM 判定や名寄せが 3 回失敗した `raw_items` は、キューを詰まらせないよう `status = 'rejected'` になります（判定が `no` で棄却されたものと区別するため、`classification` の `verdict` が `no` 以外のものが「諦めた」対象）。原因（API キー、障害など）を直したあと、再処理したいものを戻します:
+名寄せ（resolve）が 3 回失敗した `raw_items` は、キューを詰まらせないよう `status = 'rejected'` になります（判定が `no` で棄却されたものと区別するため、`classification` の `verdict` が `no` 以外のものが「諦めた」対象）。LLM 判定の失敗は棄却されず、`maybe` のリードになります。原因（API キー、障害など）を直したあと、再処理したいものを戻します:
 
 ```sql
 update raw_items
