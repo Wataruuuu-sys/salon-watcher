@@ -24,7 +24,7 @@ docker compose up -d db api frontend
 
 | サービス | 内容 | URL / ポート（すべて 127.0.0.1 にのみ公開） |
 |---|---|---|
-| `db` | PostgreSQL 16。`salon_dev` と `salon_test` を作成し、`pg_trgm` を有効化 | ホスト 5433（`DB_PORT` で変更可。5432 は手元の PostgreSQL と衝突しやすいため） |
+| `db` | PostgreSQL 18（本番の Neon と同じメジャーバージョン）。`salon_dev` と `salon_test` を作成し、`pg_trgm` を有効化 | ホスト 5433（`DB_PORT` で変更可。5432 は手元の PostgreSQL と衝突しやすいため） |
 | `api` | 起動時に `salon_dev` へマイグレーションを適用し、固定の開発用ユーザーで API を提供（`api:local`、ソース変更で再読込） | http://localhost:8080 |
 | `frontend` | `next dev`。`NEXT_PUBLIC_AUTH_MODE=none` で Cognito をバイパス | http://localhost:3000 |
 | `batch` | 本番と同じイメージ（profile `batch`）。`docker compose run` で使う | - |

@@ -6,6 +6,8 @@ frontend/out/
 frontend/next-env.d.ts
 *.tsbuildinfo
 .env
+.env.*
+!.env.example
 # Terraform
 .terraform/
 *.tfstate
@@ -16,3 +18,4 @@ frontend/next-env.d.ts
 
 # Local scratch files (not committed)
 tmp/
+.neon
