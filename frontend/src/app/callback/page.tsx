@@ -1,10 +1,14 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { getUserManager } from '../../lib/auth';
+import { authBypassed, getUserManager } from '../../lib/auth';
 
 export default function CallbackPage() {
   const [error, setError] = useState('');
   useEffect(() => {
+    if (authBypassed()) {
+      window.location.replace('/');
+      return;
+    }
     getUserManager()
       .signinRedirectCallback()
       .then(() => window.location.replace('/'))

@@ -1,5 +1,10 @@
 import { UserManager, WebStorageStateStore } from 'oidc-client-ts';
 
+/** Dev-only: skip Cognito entirely. NODE_ENV is inlined by Next, so a production build can never bypass. */
+export function authBypassed(): boolean {
+  return process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_AUTH_MODE === 'none';
+}
+
 let manager: UserManager | undefined;
 
 /** Cognito Hosted UI, authorization code + PKCE. Tokens live in sessionStorage. */

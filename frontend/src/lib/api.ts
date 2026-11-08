@@ -1,4 +1,4 @@
-import { getAccessToken } from './auth';
+import { authBypassed, getAccessToken } from './auth';
 import type { Lead, ThreadsQueriesView } from './types';
 
 export class ApiError extends Error {
@@ -11,13 +11,13 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = await getAccessToken();
-  if (!token) throw new ApiError(401, 'ログインが必要です');
+  const token = authBypassed() ? null : await getAccessToken();
+  if (!token && !authBypassed()) throw new ApiError(401, 'ログインが必要です');
   const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? ''}${path}`, {
     ...init,
     headers: {
       ...init.headers,
-      authorization: `Bearer ${token}`,
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
       ...(init.body ? { 'content-type': 'application/json' } : {}),
     },
   });
