@@ -194,6 +194,10 @@ X（旧Twitter）、TikTok、地域情報サイト（号外NET等）、Google検
 
 DB製品（Neon or Aurora）、UIのホスティング詳細、ORMの選択はビルダーに任せる。
 
+> **注記（バッチ実行基盤と IaC の置き換え）:** 上表の「オーケストレーション（Step Functions + Lambda）」と「IaC（AWS CDK）」は、`2026-10-18-dev-env-terraform-design.md` で置き換えた。バッチは EventBridge Scheduler が ECS Fargate のタスクを起動して実行し（Lambda は API のみ。Step Functions は廃止）、IaC は Terraform とする。
+>
+> **DB を VPC 外（Neon）に置く理由:** 本来は DB を VPC 内（RDS 等）に置き、アプリは NAT ゲートウェイ経由で外へ出る構成が望ましい。しかし NAT は常時課金で月 $35 程度以上かかり、観察期間の個人ツールには見合わない。そのため観察期間中は Neon（TLS、無料枠）を VPC 外に置き、バッチは公開サブネットのパブリック IP から直接出る。費用対効果が確認できたら RDS + プライベートサブネット + NAT へ移行する。
+
 ## 9. 段階的リリース（作者判断）
 
 クリティカルパスはSNS対応とHPB掲載判定（オーナー発言）。
