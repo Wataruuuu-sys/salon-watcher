@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/.next
+frontend/out
+infra
+legacy
+docs
+.git
+.superpowers
+.env
+*.tsbuildinfo

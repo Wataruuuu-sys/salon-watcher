@@ -15,7 +15,7 @@ export interface SourceContext {
 
 export interface Source {
   id: SourceId;
-  /** Unit of fan-out for the Step Functions Map state. */
+  /** Unit of fan-out: the batch collects all shards of a source in parallel. */
   listShards(ctx: SourceContext): Promise<string[]>;
   collect(shard: string, ctx: SourceContext): Promise<RawItemInput[]>;
 }

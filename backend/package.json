@@ -7,11 +7,16 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "migrate": "drizzle-kit migrate",
-    "import-v3": "tsx src/cli/importV3.ts"
+    "import-v3": "tsx src/cli/importV3.ts",
+    "batch": "tsx src/batch/main.ts",
+    "api:local": "tsx src/local/apiServer.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "bundle:api": "node scripts/bundle-api.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "drizzle-kit": "^0.31.11",
+    "esbuild": "^0.21.5",
     "tsx": "^4.23.15",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"

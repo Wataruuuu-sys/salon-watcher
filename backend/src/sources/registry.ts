@@ -1,7 +1,5 @@
 import type { SourceId } from '../domain/types.js';
 import type { Source } from './types.js';
-import { googleMapsSource } from './googleMaps/source.js';
-import { threadsSource } from './threads/source.js';
 
 const ALL_SOURCES: SourceId[] = ['google_maps', 'threads'];
 
@@ -16,19 +14,14 @@ export function enabledSources(env: Record<string, string | undefined>): SourceI
   return ALL_SOURCES.filter((id) => !disabled.has(id));
 }
 
-export const ENABLED_SOURCES: SourceId[] = enabledSources(process.env);
-
-const sources = new Map<SourceId, Source>();
-
-export function registerSource(source: Source): void {
-  sources.set(source.id, source);
+/** Lookup over the given sources (real or fake). */
+export function buildRegistry(list: Source[]): { getSource(id: SourceId): Source } {
+  const byId = new Map<SourceId, Source>(list.map((s) => [s.id, s]));
+  return {
+    getSource(id) {
+      const source = byId.get(id);
+      if (!source) throw new Error(`unknown source: ${id}`);
+      return source;
+    },
+  };
 }
-
-export function getSource(id: SourceId): Source {
-  const source = sources.get(id);
-  if (!source) throw new Error(`unknown source: ${id}`);
-  return source;
-}
-
-registerSource(googleMapsSource);
-registerSource(threadsSource);

@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createThreadsSource } from '../../../src/sources/threads/source.js';
 import { ThreadsAuthError, threadsClient, type ThreadsPost } from '../../../src/sources/threads/client.js';
 import { saveThreadsQueries } from '../../../src/sources/threads/queries.js';
-import { getSource } from '../../../src/sources/registry.js';
 import type { SourceContext } from '../../../src/sources/types.js';
 import { getTestDb, resetDb } from '../../helpers/db.js';
 import type { Db } from '../../../src/db/client.js';
@@ -29,8 +28,8 @@ describe('threads source', () => {
     warned = [];
   });
 
-  it('is registered with a single shard', async () => {
-    const s = getSource('threads');
+  it('has a single shard', async () => {
+    const s = createThreadsSource(() => ({ keywordSearch: async () => [] }));
     expect(await s.listShards(ctxFor(db))).toEqual(['all']);
   });
 

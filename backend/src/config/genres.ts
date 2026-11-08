@@ -1,4 +1,4 @@
-import type { Genre } from '../domain/types';
+import type { Genre } from '../domain/types.js';
 
 export const GENRES: { id: Genre; label: string; mapsQueries: string[]; threadsWords: string[] }[] = [
   { id: 'hair', label: 'ヘア', mapsQueries: ['美容院'], threadsWords: ['美容室'] },

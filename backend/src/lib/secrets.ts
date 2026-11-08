@@ -1,6 +1,8 @@
 import { GetParameterCommand, PutParameterCommand, SSMClient } from '@aws-sdk/client-ssm';
 
 export interface SecretStore {
+  /** Backing store kind; lets callers/tests tell implementations apart. */
+  readonly kind?: 'ssm' | 'env';
   get(name: string): Promise<string>;
   put(name: string, value: string): Promise<void>;
 }
@@ -8,6 +10,7 @@ export interface SecretStore {
 /** SSM Parameter Store backed secrets (SecureString). The client can be injected for fakes. */
 export function ssmSecretStore(prefix = '/salon-watcher/', client: SSMClient = new SSMClient({})): SecretStore {
   return {
+    kind: 'ssm',
     async get(name) {
       const res = await client.send(new GetParameterCommand({ Name: prefix + name, WithDecryption: true }));
       const value = res.Parameter?.Value;

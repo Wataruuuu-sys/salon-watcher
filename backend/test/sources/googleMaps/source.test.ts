@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { createGoogleMapsSource } from '../../../src/sources/googleMaps/source.js';
 import type { PlaceDetails, PlacesClient } from '../../../src/sources/googleMaps/places.js';
-import { getSource } from '../../../src/sources/registry.js';
 import type { SourceContext } from '../../../src/sources/types.js';
 import { mapCells, placesSeen } from '../../../src/db/schema.js';
 import { getTestDb, resetDb } from '../../helpers/db.js';
@@ -52,8 +51,8 @@ describe('googleMapsSource', () => {
     delete process.env.MAPS_DETAILS_PER_RUN;
   });
 
-  it('is registered and lists genre shards', async () => {
-    expect(getSource('google_maps').id).toBe('google_maps');
+  it('lists genre shards', async () => {
+    expect(source.id).toBe('google_maps');
     expect(await source.listShards(ctxFor(db))).toEqual(['hair', 'nail', 'eye', 'relax', 'esthe', 'seitai']);
   });
 
