@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** バッチを ECS Fargate run-task 用の単一 CLI に作り直し、全サービスを Docker で動かせる開発環境（LocalStack 含む）を用意し、CDK を Terraform に置き換え、`web/` を `frontend/` に改名する。
+**Goal:** バッチを ECS Fargate run-task 用の単一 CLI に作り直し、全サービスを Docker で動かせる開発環境（LocalStack 含む）を用意し（2026-11-08 改訂で LocalStack は廃止）、CDK を Terraform に置き換え、`web/` を `frontend/` に改名する。
 
 **Architecture:** バッチは `backend/src/batch/main.ts` の CLI（`run` / `notify` / `refresh-threads-token`）。収集はプロセス内並列、判定・HPB 判定は順次。実行環境の差し替え（秘密情報・メール・外部 API・認証）は `backend/src/runtime/` に集約し、`APP_ENV=local` のときだけ有効。インフラは `infra/modules/salon_watcher` を `infra/envs/{local,prod}` から使う Terraform。
 
-**Tech Stack:** TypeScript (Node.js 22), Vitest, Docker / Docker Compose, PostgreSQL 16, LocalStack（2026.03 以降、認証トークン）, Terraform（AWS provider 5.x）+ `tflocal`, AWS CLI, esbuild, Next.js（既存）。
+**Tech Stack:** TypeScript (Node.js 22), Vitest, Docker / Docker Compose, PostgreSQL 16, Terraform（AWS provider 5.x）, AWS CLI, esbuild, Next.js（既存）。
 
 **Spec:** `docs/superpowers/specs/2026-10-18-dev-env-terraform-design.md`（親: `docs/superpowers/specs/2026-10-18-salon-watcher-v4-design.md`）
 
@@ -36,7 +36,7 @@
 ## 前提（実行前にオーナーが用意）
 
 - ホストに Docker が無い（Phase 1 実行時点）。Docker Desktop か colima（`brew install colima docker docker-compose` → `colima start`）を入れる。Task 6 以降で必要
-- LocalStack の無料 Hobby アカウントを登録し、認証トークンを `.env` の `LOCALSTACK_AUTH_TOKEN` に入れる。Task 8 で必要
+- （2026-11-08 改訂）LocalStack は廃止したためトークン不要
 
 ---
 
@@ -238,21 +238,20 @@ README.md  docs/development.md  docs/deploy.md(書き直し)  CLAUDE.md(更新)
 
 ---
 
-### Task 8: LocalStack 環境（envs/local）と通し実行
+### Task 8: LocalStack の撤去と本番での手動起動スクリプト（2026-11-08 改訂）
+
+> 旧 Task 8（LocalStack 上の通し実行）はオーナー判断で廃止（spec §3.12）。代わりに LocalStack 関連を取り除き、AWS 発行後の通し確認に使う手動起動スクリプトを用意する。
 
 **Files:**
-- Create: `infra/envs/local/{main.tf,variables.tf,terraform.tfvars.example}`、`infra/scripts/local-up.sh`（イメージを LocalStack の ECR に push → `tflocal apply` → SSM に `DATABASE_URL` 等を投入）、`infra/scripts/local-run-task.sh`（スケジュールを待たずに同じ RunTask を手動起動）
-- Test: 実地確認の記録（`docs/development.md` に反映）
+- Modify: `docker-compose.yml`（`localstack` サービスと関連コメント・`MAIN_DOCKER_NETWORK` 等を削除）、`.env.example`（`LOCALSTACK_AUTH_TOKEN` を削除）、`scripts/check-compose.mjs`（localstack 関連の検査を削除。代わりに「公開ポートはすべて 127.0.0.1」「サービス一覧に localstack が無い」を検査）、`docker/tools/Dockerfile`（tflocal を削除）
+- Modify: `infra/modules/salon_watcher/*`（LocalStack 用の `create_cognito`/`create_api`/`create_site`/`create_scheduler` トグルと `api_requires_cognito` を削除し、常に全リソースを作る。出力の null 分岐も削除）、`infra/tests/prod.tftest.hcl`（トグル関連のテストを削除）
+- Create: `infra/scripts/run-task.sh`（`terraform -chdir=infra/envs/prod output` からクラスター・タスク定義・サブネット・SG を読み、`aws ecs run-task --launch-type FARGATE --network-configuration ...assignPublicIp=ENABLED --overrides` で引数のコマンド（例 `run --sources google_maps`）を1回起動し、タスク ARN を表示。`--wait` で `aws ecs wait tasks-stopped` 後に終了コードを表示）
 
-**Interfaces:**
-- Consumes: Task 7 の module（`create_*` 変数）
-- `envs/local`: provider endpoints を `http://localhost:4566`（tools コンテナからは `http://localstack:4566`）、タスク定義の環境変数に `APP_ENV=local`・`FAKE_EXTERNAL=1`・compose の `db` を指す `DATABASE_URL` を追加できる変数 `extra_task_env`（module に追加、既定 {}、prod では使わない）
-
-- [ ] **Step 1: スパイク**: LocalStack（トークンあり）に対し、ECR・ECS（Fargate RunTask）・Scheduler・SNS・EventBridge・SSM・Cognito・API Gateway v2・CloudFront・Lambda を `tflocal apply` で作成できるか試し、可否を表にする
-- [ ] **Step 2:** 作れないものは `envs/local` で `create_* = false`。`local-up.sh` を実装
-- [ ] **Step 3: 実地確認**: `local-run-task.sh run --sources google_maps`（2回）→ LocalStack が起動したタスクが compose の `db` に書き込む → `curl localhost:8080/leads?tab=main` に 'Lily'。Scheduler が使える場合はスケジュールを1分後に設定して自動起動も確認
-- [ ] **Step 4:** スパイクの表と手順を `docs/development.md` の LocalStack 節の下書きとして報告に残す
-- [ ] **Step 5:** コミット `feat: localstack environment with end-to-end batch run`
+- [ ] **Step 1:** `npm run check:compose` に新しい検査を足して FAIL（localstack がまだある）を確認 → 削除して PASS
+- [ ] **Step 2:** トグル削除後、`docker-compose run --rm tools terraform fmt -check -recursive infra`・`init -backend=false`・`validate`・`terraform -chdir=infra test` が PASS
+- [ ] **Step 3:** `bash -n infra/scripts/run-task.sh`、`shellcheck` があれば実行。アカウント・メールのハードコードが無いこと
+- [ ] **Step 4:** `grep -rni localstack --exclude-dir=node_modules --exclude-dir=.terraform . | grep -v docs/superpowers` が 0 件
+- [ ] **Step 5:** コミット `chore: drop localstack, add manual run-task script`
 
 ---
 
@@ -263,8 +262,8 @@ README.md  docs/development.md  docs/deploy.md(書き直し)  CLAUDE.md(更新)
 - Modify: `docs/deploy.md`（Terraform + ECS 前提に全面改稿）, `CLAUDE.md`（構成・テストコマンド）, `docs/superpowers/specs/2026-10-18-salon-watcher-v4-design.md` §8（注記）
 
 - `README.md`: 何をするツールか / 構成図（mermaid: Scheduler → ECS バッチ → Neon、CloudFront → S3、HTTP API → Lambda → Neon）/ **DB を VPC 外に置く理由**（spec §3.8 の4点: 本来は VPC 内＋NAT が望ましい、NAT は常時課金で月 $35 程度以上、観察期間はコストを優先して Neon、費用対効果確認後に RDS＋プライベートサブネット＋NAT へ移行）/ 開発・デプロイ手順書へのリンク
-- `docs/development.md`: 前提（Docker、LocalStack トークン）、`.env`、`docker compose up`、テスト、バッチのローカル実行、LocalStack での通し実行（Task 8 の表）、本物の API への切り替え
-- `docs/deploy.md`: Neon・SSM 4つ・Meta App Review・`sources_disabled = "threads"`・2段階デプロイ（`terraform apply` → `push-batch-image.sh` → 出力で frontend をビルド → `deploy-frontend.sh`）・SES サンドボックス・SNS 購読確認・Cognito ユーザー作成・v3 取り込み・スモークチェック（Phase 1 版の項目を維持し、Lambda/Step Functions の記述を ECS に置き換え）・state を S3 に移す手順
+- `docs/development.md`: 前提（Docker）、`.env`、`docker compose up`、テスト、バッチのローカル実行、本物の API への切り替え
+- `docs/deploy.md`: Neon・SSM 4つ・Meta App Review・`sources_disabled = "threads"`・2段階デプロイ（`terraform apply` → `push-batch-image.sh` → 出力で frontend をビルド → `deploy-frontend.sh`）・SES サンドボックス・SNS 購読確認・Cognito ユーザー作成・v3 取り込み・スモークチェック（Phase 1 版の項目を維持し、Lambda/Step Functions の記述を ECS に置き換え）・state を S3 に移す手順・**AWS 上の通し確認**（spec §3.12: `infra/scripts/run-task.sh run --sources google_maps --wait` で手動起動 → 終了コード 0・CloudWatch Logs・Neon への書き込み・画面表示を確認）・諦めた raw_items の戻し方（`status='pending', attempts=0`）・Cognito の deletion_protection により destroy 前に解除が必要なこと
 - 親設計書 §8: 「バッチ実行基盤と IaC は `2026-10-18-dev-env-terraform-design.md` で置き換え」と DB を VPC 外に置く理由の要約
 
 - [ ] **Step 1:** 執筆。`grep -rn "Step Functions\|cdk \|CDK" README.md docs/development.md docs/deploy.md CLAUDE.md` で古い記述が残っていないこと（「CDK から移行した」旨の説明は可）、`grep -rn "@gmail" .` が 0 件

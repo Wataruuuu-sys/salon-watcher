@@ -4,6 +4,7 @@
 |---|---|
 | 作成日 | 2026-10-18 |
 | 状態 | ドラフト（オーナー承認待ち） |
+| 改訂 | 2026-11-08: LocalStack を廃止（オーナー判断）。AWS 上の通し確認は、アカウント発行後に本番環境で行う（§3.12） |
 | 前提 | v4 Phase 1（PR #1）がマージ済みであること。本書はその上に積む改訂 |
 | 親設計書 | `docs/superpowers/specs/2026-10-18-salon-watcher-v4-design.md`（§8 技術構成のうちバッチ実行基盤と IaC は本書で置き換える） |
 
@@ -14,7 +15,7 @@
 Phase 1 は動くコードとテストがあるが、開発には「ローカルに PostgreSQL を入れる」「AWS アカウントが無いと通しで動かせない」という壁がある。また IaC は CDK で書いたが、オーナーは Terraform で管理したい。バッチは Lambda + Step Functions で組んだが、Lambda の15分上限に合わせた分割・打ち切りが設計を複雑にしている。AWS アカウントはまだ発行されていない。
 
 本改訂で次の4つを行う（オーナー要望）:
-1. **Docker でアプリ全体を動かせる開発環境**（DB・バックエンド・フロントエンド・AWS モック）
+1. **Docker でアプリ全体を動かせる開発環境**（DB・バックエンド・フロントエンド。AWS の機能はアプリ側の差し替えで代替。2026-11-08 改訂で LocalStack は廃止）
 2. **バッチを Lambda + Step Functions から ECS（Fargate）の run-task に移す**
 3. **インフラを CDK から Terraform に置き換える**
 4. **`web/` を `frontend/` に改名する**
@@ -22,10 +23,10 @@ Phase 1 は動くコードとテストがあるが、開発には「ローカル
 ## 2. ゴール / 非ゴール / アンチゴール
 
 ### ゴール
-- `docker compose up` で、DB・AWS モック（LocalStack）・ローカル API・フロントエンド開発サーバーが立ち上がる
+- `docker compose up` で、DB・ローカル API・フロントエンド開発サーバーが立ち上がる
 - AWS アカウント・外部 API キーなしで、収集 → 判定 → 名寄せ → HPB 判定 → 通知 の流れを手元で通しで動かせる
 - **本番と同じバッチ用コンテナイメージ**を手元でも動かせる（開発と本番で同じものが動く）
-- LocalStack 上で、スケジュール起動からバッチ実行・DB 書き込みまでを本番と同じ経路で動かす（オーナー判断。LocalStack 無料版の対応範囲で可能な限り。§5 参照）
+- スケジュール起動からバッチ実行・DB 書き込みまでの本番経路は、AWS アカウント発行後に本番環境で一度通しで確認する（§3.12。2026-11-08 オーナー判断で LocalStack から変更）
 - 全テスト（backend / frontend / infra）を Docker 内で実行できる。ホストに Node や PostgreSQL が無くてもよい
 - Terraform で本番の AWS 構成を定義し、AWS アカウント発行後にそのまま適用できる
 - `web/` → `frontend/` に改名し、参照箇所をすべて追従
@@ -91,11 +92,10 @@ Step Functions は使わない。並列実行・順序・失敗の切り分け�
 | サービス | 中身 | 備考 |
 |---|---|---|
 | `db` | PostgreSQL 16 | pg_trgm 使用。開発用 DB とテスト用 DB を初期化スクリプトで作る |
-| `localstack` | LocalStack（`localstack/localstack`、2026.03 以降の版を固定） | **認証トークン必須**（オーナーが無料 Hobby アカウントを登録して取得）。`.env` の `LOCALSTACK_AUTH_TOKEN`。トークンが無い場合も他のサービスは動く |
 | `batch` | **本番と同じバッチ用イメージ** | `docker compose run --rm batch run --sources google_maps` のように実行 |
 | `api` | backend の API ハンドラをローカル HTTP サーバーで包んだもの（例: port 8080） | API Gateway の代わり |
 | `frontend` | Next.js 開発サーバー（port 3000） | |
-| `tools`（profile 指定時のみ） | Node 22 + Terraform + `tflocal` + AWS CLI | テスト実行、Terraform 操作用 |
+| `tools`（profile 指定時のみ） | Node 22 + Terraform + AWS CLI | テスト実行、Terraform 操作用 |
 
 - ソースはボリュームでマウントし、ホットリロードが効く（作者判断）。`node_modules` はコンテナ側のボリュームに置く（作者判断）
 - バッチ用イメージは本番用ビルド（`Dockerfile` の本番ステージ）と同じ内容。開発時はソースマウントで上書きできるステージを別に持ってよい
@@ -113,7 +113,6 @@ Step Functions は使わない。並列実行・順序・失敗の切り分け�
 - **外部 API のフェイク**: `FAKE_EXTERNAL=1` のとき、Places / Threads / Claude / HPB の各クライアントを決まったデータを返すフェイクに差し替える。`APP_ENV=local` のときだけ有効。フェイクのデータには、Map と Threads で同じ店が出る例・maybe の例・HPB 掲載ありの例を含める
 - キーを `.env` に入れて `FAKE_EXTERNAL` を外せば、本物の外部 API を叩ける（メールはローカルでは常にモック）
 - `APP_ENV=local` 以外でフェイク・認証省略・メールモックが有効にならないことをテストで保証する
-- LocalStack 上で動かすときは、LocalStack が起動する ECS タスクに `APP_ENV=local` と compose の `db` への接続先を渡す
 
 ### 3.7 Terraform（オーナー判断: CDK から置き換え）
 
@@ -122,7 +121,6 @@ Step Functions は使わない。並列実行・順序・失敗の切り分け�
   ```
   infra/
     modules/salon_watcher/   ← 本番の AWS 構成すべて
-    envs/local/              ← LocalStack 向け（provider の endpoint を LocalStack に向ける）
     envs/prod/               ← 本番向け。アカウント発行までは local state、発行後に S3 backend へ切り替え
   ```
 - 作るもの: ECR、ECS クラスター・タスク定義（タスクロール / 実行ロール）、VPC・公開サブネット・セキュリティグループ、EventBridge Scheduler 4本（§3.2 の時刻、コマンドを上書きして RunTask）、タスク異常終了の EventBridge ルール → SNS（メール購読）、API Lambda + HTTP API + JWT オーソライザー、Cognito、S3 + CloudFront（OAC・index.html 書き換え関数）、SES 送信元 ID、CloudWatch Logs、API Lambda エラーアラーム
@@ -131,8 +129,8 @@ Step Functions は使わない。並列実行・順序・失敗の切り分け�
 - 出力: サイト URL・API URL・CognitoAuthority・クライアント ID・ECR リポジトリ URL 等
 - 入力変数: `owner_email` `notify_from` `notify_to` `cognito_domain_prefix` `sources_disabled`。`example.com` を含む値は validation で拒否。実値は `terraform.tfvars`（コミットしない。`*.tfvars.example` を置く）
 - ビルドと配信: バッチは `docker build` → ECR に push。API Lambda は esbuild で zip。フロントは `terraform apply` 後にビルドして `aws s3 sync`（スクリプトにまとめる。作者判断）
-- 本番の DB 接続文字列は Phase 1 と同じく SSM に手動登録（Terraform では作らない）。`envs/local` では LocalStack の SSM に compose の `db` を指す値を入れてよい
-- 確認方法: `terraform fmt -check`・`terraform validate`（両 env）、`envs/local` を LocalStack に適用してスケジュール起動 → バッチ実行 → DB 書き込みまで確認、自動テスト（`terraform test` 等、ビルダー判断）でスケジュール式とタイムゾーン、IAM の範囲、セキュリティグループに内向きルールが無いこと、Cognito の管理者のみ作成 を確認
+- 本番の DB 接続文字列は Phase 1 と同じく SSM に手動登録（Terraform では作らない）
+- 確認方法: `terraform fmt -check`・`terraform validate`、自動テスト（`terraform test` 等、ビルダー判断）でスケジュール式とタイムゾーン、IAM の範囲、セキュリティグループに内向きルールが無いこと、Cognito の管理者のみ作成 を確認
 
 ### 3.8 DB を VPC の外（Neon）に置く理由（設計資料と README の両方に記載する）
 - 本来は、DB を VPC 内（RDS 等）に置き、アプリも VPC 内からインターネットへは NAT ゲートウェイ経由で出る構成が望ましい（DB を外部に晒さない、通信経路を閉じられる）
@@ -146,13 +144,17 @@ Step Functions は使わない。並列実行・順序・失敗の切り分け�
 
 ### 3.10 ドキュメント
 - 新規 `README.md`（ルート）: 何をするツールか、構成図（簡易）、DB を VPC 外に置く理由（§3.8）、開発・デプロイ手順書へのリンク
-- 新規 `docs/development.md`: `.env` の作り方、LocalStack トークンの取得、`docker compose up`、テスト、バッチのローカル実行、LocalStack 上での通し実行、本物の API への切り替え
+- 新規 `docs/development.md`: `.env` の作り方、`docker compose up`、テスト、バッチのローカル実行、本物の API への切り替え
 - `docs/deploy.md` を Terraform + ECS 前提に書き直す（2段階デプロイ、イメージの push、SES サンドボックス、Cognito ユーザー作成などは維持）
 - CLAUDE.md の構成・テストコマンドの記述を更新
 - 親設計書 §8 に「バッチ実行基盤と IaC は本書で置き換え」の注記と §3.8 の DB の理由を追記
 
 ### 3.11 作業の土台
 - PR #1 のマージ後、`master` から新しいブランチを切る。既存の `docker-compose.yml`（テスト専用、port 5433）は置き換え、テストの既定接続先も compose の `db` に合わせる
+
+### 3.12 AWS 上の通し確認（2026-11-08 改訂、オーナー判断）
+- LocalStack は使わない。理由: (1) アプリが使う外部 API と AWS 機能（SSM・SES）はアプリ側の差し替え（§3.6）で代替済み、(2) 設定値の誤りは `terraform test` で確認済み、(3) IAM 権限不足など本番特有の誤りは LocalStack では検出できず結局本物の AWS が要る、(4) LocalStack は AWS とは別のアカウント・トークンが必要でオーナーはアカウントを AWS に一本化したい
+- AWS アカウント発行後、`docs/deploy.md` の手順で本番に適用し、スケジュールを待たずに RunTask を手動で1回起動して、バッチ実行 → Neon への書き込み → 画面表示までを確認する。手順（手動起動のコマンドと確認項目）を `docs/deploy.md` に書く
 
 ## 4. ビルダーに任せること
 - Node のベースイメージ、Dockerfile のステージ構成、compose の細部（ヘルスチェック、ポート番号）
@@ -164,7 +166,6 @@ Step Functions は使わない。並列実行・順序・失敗の切り分け�
 ## 5. リスク
 | 項目 | 内容 | 対応 |
 |---|---|---|
-| LocalStack 無料版の対応範囲 | ECS・Scheduler・Cognito・API Gateway v2・CloudFront が無料版で使えるか未確認 | 最初にスパイクで確認。使えないものは `envs/local` で作らない設定にし、その部分は compose の `batch` / `api` で代替して手順書に明記 |
-| LocalStack の認証トークン | オーナーのアカウント登録が必要 | `docs/development.md` に手順。トークン無しでも LocalStack 以外は動く |
+| AWS 上の経路はアカウント発行まで未確認 | Scheduler → ECS 起動、IAM 権限不足などは本物の AWS でしか分からない | 設定値は `terraform test` で固定。発行後に §3.12 の手順で通し確認 |
 | 実行基盤の書き換えで振る舞いが変わる | 失敗時の扱い・順序 | §3.2 の失敗の扱いを自動テストで固定 |
 | Fargate のパブリック IP | タスクに公開 IP が付く | 内向き全拒否のセキュリティグループで受け付けない。Terraform のテストで内向きルールが無いことを確認 |
